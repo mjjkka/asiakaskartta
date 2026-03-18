@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Asiakaskartta Pro - Nimihover</title>
+    <title>Asiakaskartta Pro - Kaksivaiheinen valinta</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -69,6 +69,16 @@
         .delete-btn { background: none; color: #dc3545; border: 1px solid #dc3545; padding: 10px; border-radius: 8px; margin-top: 15px; cursor: pointer; font-weight: bold; font-size: 13px; }
         
         .map-select-active { cursor: crosshair !important; border: 3px solid #007bff !important; }
+
+        .leaflet-tooltip {
+            font-weight: bold;
+            font-size: 14px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -218,15 +228,27 @@
                 if (currentFilter === "Kaikki" || a.group === currentFilter) {
                     const m = L.marker([a.lat, a.lon], { icon: getMarkerColor(a) }).addTo(map);
                     
-                    // LISÄTTY: Näyttää nimen kun hiiri on päällä
-                    m.bindTooltip(a.name, { direction: 'top', offset: [0, -40] });
+                    m.bindTooltip(a.name, { 
+                        direction: 'top', 
+                        offset: [0, -35]
+                    });
 
                     m.on('click', (e) => {
                         if (isRelocating) return;
                         L.DomEvent.stopPropagation(e);
-                        map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
-                        openPanel(index);
+                        
+                        // JOS tooltip ei ole vielä auki, avataan se (ensimmäinen painallus)
+                        if (!m.isTooltipOpen()) {
+                            // Suljetaan muut tooltipit ensin
+                            markers.forEach(otherM => otherM.closeTooltip());
+                            m.openTooltip();
+                        } else {
+                            // JOS tooltip on jo auki, avataan paneeli (toinen painallus)
+                            map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
+                            openPanel(index);
+                        }
                     });
+
                     markers.push(m);
                 }
             });
@@ -288,6 +310,8 @@
             isRelocating = false;
             document.getElementById('map').classList.remove('map-select-active');
             document.getElementById('btn-edit-address').innerText = "✏️ Muokkaa osoitetta";
+            
+            markers.forEach(m => m.closeTooltip());
             map.flyTo(FINLAND_CENTER, FINLAND_ZOOM);
         }
 
@@ -447,6 +471,9 @@
         map.on('click', async (e) => {
             const lat = e.latlng.lat;
             const lon = e.latlng.lng;
+            
+            // Suljetaan tooltipit kun klikataan tyhjää karttaa
+            markers.forEach(m => m.closeTooltip());
 
             if (isRelocating && currentIndex !== null) {
                 try {
