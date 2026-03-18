@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Asiakaskartta Pro - Ryhmäsuodatus</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; font-family: 'Segoe UI', sans-serif; }
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+        
+        .controls {
+            position: absolute; top: 20px; left: 20px; z-index: 1000; 
+            background: white; padding: 20px; border-radius: 15px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 280px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+
+        .filter-container { margin-bottom: 5px; }
+        .filter-label { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 3px; display: block; }
+        #group-filter { width: 100%; padding: 8px; border-radius: 8px; border: 2px solid #007bff; font-weight: bold; background: #f0f7ff; }
+
+        .search-container { position: relative; display: flex; flex-direction: column; gap: 5px; margin-bottom: 5px; }
+        #search-input { padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box; }
+        
+        #search-results {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: white; border: 1px solid #ddd; border-radius: 8px;
+            max-height: 200px; overflow-y: auto; z-index: 1001;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: none;
+        }
+        .search-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 13px; }
+        .search-item:hover { background: #f8f9fa; }
+        .search-item strong { color: #007bff; display: block; }
+        .search-item span { color: #666; font-size: 11px; }
+
+        .btn { padding: 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; text-align: center; font-size: 14px; text-decoration: none; display: block; margin-bottom: 5px; width: 100%; }
+        .btn-add-manual { background: #6f42c1; color: white; }
+        .btn-import { background: #28a745; color: white; }
+        .btn-export { background: #007bff; color: white; }
+        .btn-settings { background: #6c757d; color: white; font-size: 12px; padding: 8px; }
+        .btn-clear { background: #dc3545; color: white; width: 100%; margin-top: 10px; }
+
+        #excel-upload { display: none; }
+        #status-text { font-size: 12px; color: #666; font-style: italic; min-height: 15px; text-align: center; margin-bottom: 5px; }
+        #settings-menu { display: none; border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px; }
+
+        #info-panel {
+            position: absolute; right: -450px; top: 0; width: 400px; height: 100vh;
+            background: white; z-index: 1001; transition: 0.4s ease;
+            box-shadow: -10px 0 20px rgba(0,0,0,0.1); padding: 30px; box-sizing: border-box;
+            display: flex; flex-direction: column; overflow-y: auto;
+        }
+        #info-panel.active { right: 0; }
+        .close-btn { align-self: flex-end; font-size: 35px; cursor: pointer; color: #ccc; line-height: 20px; }
+        .info-label { font-size: 12px; color: #888; text-transform: uppercase; font-weight: bold; margin-top: 15px; }
+        .info-value { font-size: 16px; color: #333; margin-bottom: 5px; font-weight: 500; }
+        
+        select, textarea, input[type="date"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-top: 5px; box-sizing: border-box; font-family: inherit; }
+        textarea { height: 80px; resize: none; }
+        
+        .save-btn { width: 100%; background: #007bff; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .service-btn { width: 100%; background: #28a745; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .edit-addr-btn { background: none; color: #007bff; border: 1px solid #007bff; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 11px; margin-top: 5px; font-weight: bold; width: fit-content; }
+        .delete-btn { background: none; color: #dc3545; border: 1px solid #dc3545; padding: 10px; border-radius: 8px; margin-top: 15px; cursor: pointer; font-weight: bold; font-size: 13px; }
+        
+        .map-select-active { cursor: crosshair !important; border: 3px solid #007bff !important; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <div class="filter-container">
+            <label class="filter-label">Näytä ryhmä:</label>
+            <select id="group-filter" onchange="renderMarkers()">
+                <option value="Kaikki">🌍 Kaikki asiakkaat</option>
+                <option value="Tilasäiliö">🥛 Tilasäiliö</option>
+                <option value="Kauppa">🛒 Kauppa</option>
+                <option value="Julkinen">🏢 Julkinen</option>
+                <option value="muut">📦 Muut</option>
+            </select>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="Hae nimellä tai osoitteella..." oninput="handleSearch()">
+            <div id="search-results"></div>
+        </div>
+        <button onclick="toggleSettings()" class="btn btn-settings">⚙️ Asetukset & Työkalut</button>
+        <div id="settings-menu">
+            <button onclick="addNewManual()" class="btn btn-add-manual">➕ LISÄÄ ASIAKAS KÄSIN</button>
+            <label for="excel-upload" class="btn btn-import">📥 TUO ASIAKKAAT (.xlsx)</label>
+            <input type="file" id="excel-upload" accept=".xlsx, .xls" />
+            <div id="status-text">Valmiina</div>
+            <button onclick="exportToExcel()" class="btn btn-export">📤 LATAA EXCEL (KOORDINAATIT)</button>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
+            <button onclick="clearAllData()" class="btn btn-clear">⚠️ Tyhjennä koko kartta</button>
+        </div>
+    </div>
+
+    <div id="info-panel">
+        <div class="close-btn" onclick="closePanel()">&times;</div>
+        <h2 id="disp-name" style="margin: 0; color: #007bff;">-</h2>
+        
+        <div class="info-label">Osoite</div>
+        <div id="disp-address" class="info-value">-</div>
+        <button class="edit-addr-btn" id="btn-edit-address" onclick="updateCustomerAddress()">✏️ Muokkaa osoitetta</button>
+        
+        <div class="info-label">Ryhmä</div>
+        <select id="edit-group">
+            <option value="Tilasäiliö">Tilasäiliö</option>
+            <option value="Kauppa">Kauppa</option>
+            <option value="Julkinen">Julkinen</option>
+            <option value="muut">muut</option>
+        </select>
+
+        <div class="info-label">Viimeisin huolto (Muokkaa kalenterista)</div>
+        <input type="date" id="edit-service-date">
+        
+        <div class="info-label">Huoltoväli</div>
+        <select id="edit-interval">
+            <option value="3">3 kuukautta</option>
+            <option value="6">6 kuukautta</option>
+            <option value="12" selected>12 kuukautta</option>
+        </select>
+
+        <div class="info-label">Muistiinpanot</div>
+        <textarea id="edit-notes"></textarea>
+        
+        <button class="service-btn" onclick="markAsServiced()">✅ MERKITSE HUOLLETUKSI TÄNÄÄN</button>
+        <button class="save-btn" onclick="saveChanges()">TALLENNA TIEDOT</button>
+        <button class="delete-btn" onclick="deleteSingleCustomer()">❌ Poista asiakas</button>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        const FINLAND_CENTER = [64.5, 26.0];
+        const FINLAND_ZOOM = 6; 
+        const CUSTOMER_ZOOM = 14;
+
+        const map = L.map('map', { zoomControl: false }).setView(FINLAND_CENTER, FINLAND_ZOOM);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        let asiakkaat = JSON.parse(localStorage.getItem('mapClients')) || [];
+        let markers = [];
+        let currentIndex = null;
+        let isRelocating = false;
+
+        const icons = {
+            blue: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
+            green: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
+            yellow: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
+            red: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] })
+        };
+
+        renderMarkers();
+
+        function handleSearch() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const resultsDiv = document.getElementById('search-results');
+            if (!query) { resultsDiv.style.display = 'none'; return; }
+            const currentFilter = document.getElementById('group-filter').value;
+            
+            const filtered = asiakkaat.map((a, i) => ({...a, originalIndex: i})).filter(a => {
+                const matchesSearch = a.name.toLowerCase().includes(query) || a.address.toLowerCase().includes(query);
+                const matchesFilter = (currentFilter === "Kaikki" || a.group === currentFilter);
+                return matchesSearch && matchesFilter;
+            });
+
+            if (filtered.length > 0) {
+                resultsDiv.innerHTML = filtered.map(a => `<div class="search-item" onclick="selectResult(${a.originalIndex})"><strong>${a.name}</strong><span>${a.address}</span></div>`).join('');
+                resultsDiv.style.display = 'block';
+            } else { resultsDiv.style.display = 'none'; }
+        }
+
+        function selectResult(index) {
+            const a = asiakkaat[index];
+            document.getElementById('search-input').value = a.name;
+            document.getElementById('search-results').style.display = 'none';
+            map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
+            openPanel(index);
+        }
+
+        document.addEventListener('click', (e) => { 
+            const controls = document.querySelector('.controls');
+            if (controls && !controls.contains(e.target)) {
+                document.getElementById('search-results').style.display = 'none';
+                document.getElementById('settings-menu').style.display = 'none';
+            }
+        });
+
+        function getMarkerColor(a) {
+            if (!a.isServiced || !a.lastService || a.lastService === "-" || a.lastService === "") return icons.blue;
+            const viimeHuolto = new Date(a.lastService);
+            if (isNaN(viimeHuolto.getTime())) return icons.blue;
+            const tänään = new Date();
+            const vali = parseInt(a.interval || 12);
+            const seuraavaHuolto = new Date(viimeHuolto);
+            seuraavaHuolto.setMonth(seuraavaHuolto.getMonth() + vali);
+            const varoitusRaja = new Date(seuraavaHuolto);
+            varoitusRaja.setMonth(varoitusRaja.getMonth() - 2);
+            if (tänään >= seuraavaHuolto) return icons.red;
+            if (tänään >= varoitusRaja) return icons.yellow;
+            return icons.green;
+        }
+
+        function renderMarkers() {
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            const currentFilter = document.getElementById('group-filter').value;
+
+            asiakkaat.forEach((a, index) => {
+                if (currentFilter === "Kaikki" || a.group === currentFilter) {
+                    const m = L.marker([a.lat, a.lon], { icon: getMarkerColor(a) }).addTo(map);
+                    m.on('click', (e) => {
+                        if (isRelocating) return;
+                        L.DomEvent.stopPropagation(e);
+                        map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
+                        openPanel(index);
+                    });
+                    markers.push(m);
+                }
+            });
+        }
+
+        function openPanel(index) {
+            currentIndex = index;
+            const a = asiakkaat[index];
+            document.getElementById('disp-name').innerText = a.name;
+            document.getElementById('disp-address').innerText = a.address;
+            document.getElementById('edit-group').value = a.group || "muut";
+            
+            const dateInput = document.getElementById('edit-service-date');
+            if (a.lastService && a.lastService !== "-" && a.lastService !== "") {
+                const d = new Date(a.lastService);
+                if (!isNaN(d.getTime())) {
+                    dateInput.value = d.toISOString().split('T')[0];
+                } else { dateInput.value = ""; }
+            } else { dateInput.value = ""; }
+
+            document.getElementById('edit-notes').value = a.notes || "";
+            document.getElementById('edit-interval').value = a.interval || "12";
+            document.getElementById('info-panel').classList.add('active');
+        }
+
+        function markAsServiced() {
+            if (currentIndex !== null) {
+                const tänään = new Date().toISOString().split('T')[0];
+                asiakkaat[currentIndex].isServiced = true;
+                asiakkaat[currentIndex].lastService = tänään;
+                updateStorage();
+                openPanel(currentIndex);
+            }
+        }
+
+        function saveChanges() {
+            if (currentIndex !== null) {
+                asiakkaat[currentIndex].notes = document.getElementById('edit-notes').value;
+                asiakkaat[currentIndex].interval = document.getElementById('edit-interval').value;
+                asiakkaat[currentIndex].group = document.getElementById('edit-group').value;
+                
+                const uusiPvm = document.getElementById('edit-service-date').value;
+                if (uusiPvm) {
+                    asiakkaat[currentIndex].lastService = uusiPvm;
+                    asiakkaat[currentIndex].isServiced = true;
+                } else {
+                    asiakkaat[currentIndex].lastService = "-";
+                    asiakkaat[currentIndex].isServiced = false;
+                }
+                updateStorage();
+                alert("Tiedot tallennettu!");
+                closePanel();
+            }
+        }
+
+        function closePanel() { 
+            document.getElementById('info-panel').classList.remove('active'); 
+            currentIndex = null; 
+            isRelocating = false;
+            document.getElementById('map').classList.remove('map-select-active');
+            document.getElementById('btn-edit-address').innerText = "✏️ Muokkaa osoitetta";
+            map.flyTo(FINLAND_CENTER, FINLAND_ZOOM);
+        }
+
+        document.getElementById('excel-upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                const data = evt.target.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                const status = document.getElementById('status-text');
+                status.innerText = "Käsitellään...";
+                
+                for (let r of rows) {
+                    let lat = r.Lat || r.lat;
+                    let lon = r.Lon || r.lon;
+                    let osoite = r.Osoite || r.osoite || "";
+                    let raakaHuolto = r["Viimeisin huolto"] || r.huolto || "-";
+                    let huolto = "-";
+                    let ryhma = r.Ryhmä || r.ryhma || "muut";
+
+                    if (raakaHuolto && raakaHuolto !== "-") {
+                        let d;
+                        if (typeof raakaHuolto === 'number') {
+                            d = new Date((raakaHuolto - 25569) * 86400 * 1000);
+                        } else {
+                            const osat = String(raakaHuolto).trim().split('.');
+                            if (osat.length === 3) {
+                                d = new Date(osat[2], osat[1] - 1, osat[0]);
+                            } else {
+                                d = new Date(raakaHuolto);
+                            }
+                        }
+                        if (!isNaN(d.getTime()) && d.getFullYear() > 1970) {
+                            huolto = d.toISOString().split('T')[0];
+                        }
+                    }
+                    
+                    if (!lat || !lon) {
+                        if (osoite) {
+                            try {
+                                await new Promise(res => setTimeout(res, 800));
+                                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(osoite)}`);
+                                const geoData = await res.json();
+                                if (geoData[0]) {
+                                    lat = parseFloat(geoData[0].lat);
+                                    lon = parseFloat(geoData[0].lon);
+                                }
+                            } catch (err) { console.error("Geokoodaus epäonnistui", err); }
+                        }
+                    }
+
+                    if (lat && lon) {
+                        asiakkaat.push({
+                            name: r.Nimi || r.nimi || "Nimetön",
+                            address: osoite || "-",
+                            lastService: huolto,
+                            notes: r.Muistiinpanot || r.muistiinpanot || "",
+                            interval: r["Huoltoväli (kk)"] || r.interval || "12",
+                            group: ryhma,
+                            lat: parseFloat(lat),
+                            lon: parseFloat(lon),
+                            isServiced: (huolto !== "-")
+                        });
+                    }
+                }
+                status.innerText = "Valmis!";
+                updateStorage();
+            };
+            reader.readAsBinaryString(file);
+        });
+
+        async function updateCustomerAddress() {
+            if (currentIndex === null) return;
+            const choice = confirm("Haluatko valita uuden sijainnin suoraan kartalta?");
+            if (choice) {
+                isRelocating = true;
+                document.getElementById('map').classList.add('map-select-active');
+                document.getElementById('btn-edit-address').innerText = "📍 KLIKKAA UUTTA KOHTAA KARTALTA";
+            } else {
+                const uusiOsoite = prompt("Anna uusi osoite:", asiakkaat[currentIndex].address);
+                if (!uusiOsoite) return;
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(uusiOsoite)}`);
+                    const data = await res.json();
+                    if (data && data[0]) {
+                        asiakkaat[currentIndex].address = data[0].display_name;
+                        asiakkaat[currentIndex].lat = parseFloat(data[0].lat);
+                        asiakkaat[currentIndex].lon = parseFloat(data[0].lon);
+                        updateStorage();
+                        openPanel(currentIndex);
+                    }
+                } catch (e) { alert("Haku epäonnistui."); }
+            }
+        }
+
+        async function addNewManual() {
+            const nimi = prompt("Asiakkaan nimi:");
+            if (!nimi) return;
+            const osoite = prompt("Asiakkaan osoite:");
+            if (!osoite) return;
+            const ryhma = prompt("Ryhmä (Tilasäiliö, Kauppa, Julkinen, muut):", "muut");
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(osoite)}`);
+                const data = await res.json();
+                if (data && data[0]) {
+                    const lat = parseFloat(data[0].lat);
+                    const lon = parseFloat(data[0].lon);
+                    asiakkaat.push({ name: nimi, address: data[0].display_name, lastService: "-", notes: "", interval: "12", group: ryhma, lat: lat, lon: lon, isServiced: false });
+                    updateStorage();
+                    openPanel(asiakkaat.length - 1);
+                }
+            } catch (e) { alert("Virhe."); }
+        }
+
+        function deleteSingleCustomer() {
+            if (currentIndex !== null && confirm("Poistetaanko asiakas?")) {
+                asiakkaat.splice(currentIndex, 1);
+                updateStorage();
+                closePanel();
+            }
+        }
+
+        function toggleSettings() {
+            const menu = document.getElementById('settings-menu');
+            menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+        }
+
+        // TUPLAVARMISTUS LISÄTTY TÄHÄN
+        function clearAllData() {
+            if(confirm("⚠️ Oletko varma? Tämä poistaa KAIKKI asiakkaat kartalta lopullisesti.")) {
+                if(confirm("❗ Oletko TÄYSIN varma? Tätä toimintoa ei voi peruuttaa.")) {
+                    asiakkaat = [];
+                    updateStorage();
+                    toggleSettings();
+                    alert("Kartta tyhjennetty.");
+                }
+            }
+        }
+
+        function updateStorage() {
+            localStorage.setItem('mapClients', JSON.stringify(asiakkaat));
+            renderMarkers();
+        }
+
+        function exportToExcel() {
+            if (asiakkaat.length === 0) return alert("Ei tietoja!");
+            const exportData = asiakkaat.map(a => ({
+                "Nimi": a.name, "Osoite": a.address, "Ryhmä": a.group, "Viimeisin huolto": a.lastService, 
+                "Huoltoväli (kk)": a.interval, "Muistiinpanot": a.notes, "Lat": a.lat, "Lon": a.lon
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Asiakkaat");
+            XLSX.writeFile(workbook, "Asiakkaat_Ryhmilla.xlsx");
+        }
+
+        map.on('click', async (e) => {
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
+
+            if (isRelocating && currentIndex !== null) {
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                    const data = await res.json();
+                    asiakkaat[currentIndex].lat = lat;
+                    asiakkaat[currentIndex].lon = lon;
+                    asiakkaat[currentIndex].address = data.display_name || "Tuntematon";
+                    isRelocating = false;
+                    document.getElementById('map').classList.remove('map-select-active');
+                    updateStorage();
+                    openPanel(currentIndex);
+                } catch (err) { alert("Osoitteen haku epäonnistui."); }
+                return;
+            }
+
+            let osoite = "Haetaan...";
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                const data = await res.json();
+                osoite = data.display_name || "Tuntematon";
+            } catch (err) { osoite = "Virhe"; }
+            const nimi = prompt(`Lisää uusi asiakas sijaintiin:\n${osoite}\n\nNimi:`);
+            if (nimi) {
+                const ryhma = prompt("Ryhmä (Tilasäiliö, Kauppa, Julkinen, muut):", "muut");
+                asiakkaat.push({ name: nimi, address: osoite, lastService: "-", notes: "", interval: "12", group: ryhma, lat: lat, lon: lon, isServiced: false });
+                updateStorage();
+            }
+        });
+    </script>
+</body>
+</html>
