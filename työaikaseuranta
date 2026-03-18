@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suvifood Työaikaseuranta</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body, html { 
+            margin: 0; padding: 0; height: 100%; overflow-x: hidden; 
+            font-family: 'Arial Rounded MT Bold', 'Helvetica Rounded', Arial, sans-serif; 
+        }
+        
+        .parallax-bg {
+            background-image: url('taustakuva.jpg'); 
+            background-attachment: fixed; background-position: center; background-size: cover;
+            height: 100vh; width: 100%; position: fixed; top: 0; left: 0; z-index: -1;
+        }
+
+        .settings-panel {
+            position: fixed; top: 0; left: -350px; width: 300px; height: 100%;
+            background: rgba(20, 20, 20, 0.98); color: white; z-index: 1000;
+            transition: 0.4s ease; padding: 25px; box-shadow: 5px 0 15px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column;
+        }
+        .settings-panel.open { left: 0; }
+
+        .settings-btn {
+            position: fixed; top: 20px; left: 20px; z-index: 1100;
+            background: rgba(0, 0, 0, 0.6); color: white; border: 1px solid rgba(255,255,255,0.3);
+            width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+
+        .user-input-group { display: flex; gap: 5px; margin-bottom: 20px; }
+        input, select { padding: 8px; border-radius: 5px; border: none; font-family: inherit; }
+        input { flex-grow: 1; }
+
+        .user-list { list-style: none; padding: 0; flex-grow: 1; overflow-y: auto; }
+        .user-item { 
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 5px; border-radius: 5px;
+        }
+        .delete-user { color: #ff4444; cursor: pointer; }
+        .select-user { cursor: pointer; flex-grow: 1; }
+
+        .excel-btn { 
+            background: #1d6f42; color: white; border: none; padding: 12px; 
+            border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 10px;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            font-family: inherit;
+        }
+        .excel-btn:hover { background: #155231; }
+
+        .content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; color: white; }
+        .curved-text-container { width: 100%; max-width: 900px; height: 260px; margin-top: 10px; }
+        .curved-text-path { 
+            fill: white; 
+            font-weight: 900; 
+            text-transform: uppercase; 
+            letter-spacing: 3px;
+        }
+
+        .section {
+            background: rgba(0, 0, 0, 0.8); padding: 2rem; border-radius: 25px;
+            width: 90%; max-width: 500px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            margin-top: -10px; 
+        }
+
+        .current-user-display { color: #ffcc00; font-weight: bold; margin-bottom: 10px; font-size: 1.2rem; }
+        .timer-display { font-size: 3.5rem; margin: 10px 0; font-family: monospace; color: #00d4ff; text-shadow: none; }
+        
+        .btn-group { display: flex; gap: 15px; justify-content: center; margin-top: 20px; }
+        button { padding: 15px 25px; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; transition: 0.3s; text-transform: uppercase; font-family: inherit; }
+        .btn-start { background: #28a745; color: white; }
+        .btn-stop { background: #dc3545; color: white; }
+        button:disabled { background: #6c757d; cursor: not-allowed; opacity: 0.5; }
+
+        .log-container { text-align: left; margin-top: 30px; }
+        ul#logList { list-style: none; padding: 0; max-height: 250px; overflow-y: auto; text-shadow: none; }
+        #logList li { background: rgba(255,255,255,0.1); padding: 10px; margin-bottom: 8px; border-radius: 10px; border-left: 4px solid #00d4ff; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+    <div class="settings-panel" id="settingsPanel">
+        <h3>Käyttäjät</h3>
+        <div class="user-input-group">
+            <input type="text" id="userNameInput" placeholder="Nimi...">
+            <button class="add-btn" onclick="lisaaKayttaja()" style="background:#28a745; color:white; border:none; border-radius:5px; cursor:pointer; padding:5px 10px;"><i class="fas fa-plus"></i></button>
+        </div>
+        <ul class="user-list" id="userList"></ul>
+        <hr style="margin: 15px 0; border: 0; border-top: 1px solid #444;">
+        <h3>Kuukausivalinta</h3>
+        <select id="monthSelector" onchange="naytaLoki()" style="width: 100%; margin-bottom: 15px; background: #333; color: white; border: 1px solid #555;">
+        </select>
+        <button class="excel-btn" onclick="lataaExcel()" style="width: 100%;">
+            <i class="fas fa-file-excel"></i> Lataa valittu KK Exceliin
+        </button>
+        <button onclick="suljeAsetukset()" style="width: 100%; background: #555; color: white; border:none; padding:10px; border-radius:5px; cursor:pointer;">Sulje</button>
+    </div>
+
+    <div class="settings-btn" id="settingsBtn"><i class="fas fa-cog"></i></div>
+    <div class="parallax-bg" id="parallaxBg"></div>
+
+    <div class="content">
+        <div class="curved-text-container">
+            <svg viewBox="0 0 1000 300" style="width:100%; height:100%;">
+                <rect x="100" y="20" width="800" height="220" rx="30" ry="30" 
+                      fill="rgba(0, 0, 0, 0.6)" />
+
+                <path id="curveTop" d="M 150,140 C 350,60 650,60 850,140" fill="none" />
+                <path id="curveBottom" d="M 150,210 C 350,130 650,130 850,210" fill="none" />
+                
+                <text class="curved-text-path" style="font-size: 55px;">
+                    <textPath href="#curveTop" startOffset="50%" text-anchor="middle">Suvifood keittiö</textPath>
+                </text>
+                <text class="curved-text-path" style="font-size: 45px;">
+                    <textPath href="#curveBottom" startOffset="50%" text-anchor="middle">työaikaseuranta</textPath>
+                </text>
+            </svg>
+        </div>
+        <div class="section">
+            <div class="current-user-display" id="currentUser">Valitse käyttäjä</div>
+            <div class="timer-display" id="display">00:00:00</div>
+            <div class="btn-group">
+                <button class="btn-start" id="startBtn" disabled>Aloita</button>
+                <button class="btn-stop" id="stopBtn" disabled>Lopeta</button>
+            </div>
+            <div class="log-container">
+                <div id="logHeader" style="color: #ffcc00; margin-bottom: 10px;">Valitse käyttäjä</div>
+                <ul id="logList"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let timerInterval;
+        let nykyinenKayttaja = "";
+        
+        const display = document.getElementById('display');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const monthSelector = document.getElementById('monthSelector');
+        const settingsPanel = document.getElementById('settingsPanel');
+
+        document.getElementById('settingsBtn').onclick = () => settingsPanel.classList.add('open');
+        function suljeAsetukset() { settingsPanel.classList.remove('open'); }
+
+        function taytaKuukaudet() {
+            const kuukaudet = ["Tammikuu", "Helmikuu", "Maaliskuu", "Huhtikuu", "Toukokuu", "Kesäkuu", "Heinäkuu", "Elokuu", "Syyskuu", "Lokakuu", "Marraskuu", "Joulukuu"];
+            const nyt = new Date();
+            const nykyinenKK = nyt.getMonth();
+            const nykyinenVuosi = nyt.getFullYear();
+
+            for (let i = 0; i < 12; i++) {
+                const opt = document.createElement('option');
+                const kkIndeksi = (nykyinenKK - i + 12) % 12;
+                const vuosi = (nykyinenKK - i < 0) ? nykyinenVuosi - 1 : nykyinenVuosi;
+                opt.value = `${kkIndeksi + 1}.${vuosi}`;
+                opt.innerHTML = `${kuukaudet[kkIndeksi]} ${vuosi}`;
+                monthSelector.appendChild(opt);
+            }
+        }
+
+        function lisaaKayttaja() {
+            const nimi = document.getElementById('userNameInput').value.trim();
+            if(!nimi) return;
+            const kayttajat = JSON.parse(localStorage.getItem('tyoKayttajat')) || [];
+            kayttajat.push(nimi);
+            localStorage.setItem('tyoKayttajat', JSON.stringify(kayttajat));
+            document.getElementById('userNameInput').value = "";
+            paivitaKayttajalista();
+        }
+
+        function poistaKayttaja(index) {
+            const kayttajat = JSON.parse(localStorage.getItem('tyoKayttajat'));
+            const nimi = kayttajat[index];
+            kayttajat.splice(index, 1);
+            localStorage.setItem('tyoKayttajat', JSON.stringify(kayttajat));
+            localStorage.removeItem('start_' + nimi);
+            if(nykyinenKayttaja === nimi) sijatseAlkuun();
+            paivitaKayttajalista();
+        }
+
+        function sijatseAlkuun() {
+            nykyinenKayttaja = "";
+            document.getElementById('currentUser').innerText = "Valitse käyttäjä";
+            display.innerText = "00:00:00";
+            startBtn.disabled = true;
+            stopBtn.disabled = true;
+            document.getElementById('logList').innerHTML = "";
+        }
+
+        function valitseKayttaja(nimi) {
+            nykyinenKayttaja = nimi;
+            document.getElementById('currentUser').innerText = "Käyttäjä: " + nimi;
+            document.getElementById('logHeader').innerText = "Kirjaukset (" + monthSelector.options[monthSelector.selectedIndex].text + "):";
+            suljeAsetukset();
+            tarkistaKello();
+            naytaLoki();
+        }
+
+        function paivitaKayttajalista() {
+            const kayttajat = JSON.parse(localStorage.getItem('tyoKayttajat')) || [];
+            document.getElementById('userList').innerHTML = kayttajat.map((nimi, i) => `
+                <li class="user-item">
+                    <span class="select-user" onclick="valitseKayttaja('${nimi}')">${nimi}</span>
+                    <i class="fas fa-trash delete-user" onclick="poistaKayttaja(${i})"></i>
+                </li>
+            `).join('');
+        }
+
+        function tarkistaKello() {
+            clearInterval(timerInterval);
+            const tallennettuAlku = localStorage.getItem('start_' + nykyinenKayttaja);
+            if (tallennettuAlku) {
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                paivitaTimer(tallennettuAlku);
+                timerInterval = setInterval(() => paivitaTimer(tallennettuAlku), 1000);
+            } else {
+                display.innerText = "00:00:00";
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        }
+
+        function paivitaTimer(alkuAika) {
+            const ms = Date.now() - parseInt(alkuAika);
+            display.innerText = new Date(ms).toISOString().substr(11, 8);
+        }
+
+        startBtn.onclick = () => {
+            const nyt = Date.now();
+            localStorage.setItem('start_' + nykyinenKayttaja, nyt);
+            tarkistaKello();
+        };
+
+        stopBtn.onclick = () => {
+            const alkuAika = parseInt(localStorage.getItem('start_' + nykyinenKayttaja));
+            const loppuMs = Date.now();
+            const kesto = display.innerText;
+            const pvm = new Date();
+            
+            const uusi = {
+                nimi: nykyinenKayttaja,
+                paiva: pvm.toLocaleDateString('fi-FI'),
+                kkVuosi: `${pvm.getMonth() + 1}.${pvm.getFullYear()}`,
+                aika: new Date(alkuAika).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + " - " + new Date(loppuMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                kesto: kesto
+            };
+            const loki = JSON.parse(localStorage.getItem('tyoloki')) || [];
+            loki.unshift(uusi);
+            localStorage.setItem('tyoloki', JSON.stringify(loki));
+            localStorage.removeItem('start_' + nykyinenKayttaja);
+            tarkistaKello();
+            naytaLoki();
+        };
+
+        function naytaLoki() {
+            const loki = JSON.parse(localStorage.getItem('tyoloki')) || [];
+            const valittuKK = monthSelector.value;
+            if(nykyinenKayttaja) {
+                document.getElementById('logHeader').innerText = "Kirjaukset (" + monthSelector.options[monthSelector.selectedIndex].text + "):";
+            }
+            const suodatettuLoki = loki.filter(l => l.nimi === nykyinenKayttaja && l.kkVuosi === valittuKK);
+            document.getElementById('logList').innerHTML = suodatettuLoki.map(l => `
+                <li><strong>${l.paiva}</strong><br>${l.aika} | Yhteensä: ${l.kesto}</li>
+            `).join('');
+        }
+
+        function lataaExcel() {
+            const loki = JSON.parse(localStorage.getItem('tyoloki')) || [];
+            const valittuKK = monthSelector.value;
+            const kkTeksti = monthSelector.options[monthSelector.selectedIndex].text;
+            const kkLoki = loki.filter(l => l.kkVuosi === valittuKK);
+            if (kkLoki.length === 0) {
+                alert("Ei kirjauksia valitulle kuukaudelle!");
+                return;
+            }
+            const nimet = [...new Set(kkLoki.map(l => l.nimi))].sort();
+            let csvContent = "\uFEFFKUUKAUSI: " + kkTeksti + "\nNimi;Päivä;Kellonaika;Kesto\n";
+            nimet.forEach(nimi => {
+                const henkilonKirjaukset = kkLoki.filter(l => l.nimi === nimi);
+                let kokonaisSekunnit = 0;
+                henkilonKirjaukset.forEach(l => {
+                    csvContent += `${l.nimi};${l.paiva};${l.aika};${l.kesto}\n`;
+                    const osat = l.kesto.split(':');
+                    kokonaisSekunnit += (+osat[0]) * 3600 + (+osat[1]) * 60 + (+osat[2]);
+                });
+                const h = Math.floor(kokonaisSekunnit / 3600).toString().padStart(2, '0');
+                const m = Math.floor((kokonaisSekunnit % 3600) / 60).toString().padStart(2, '0');
+                const s = (kokonaisSekunnit % 60).toString().padStart(2, '0');
+                csvContent += `${nimi};;;KUUKAUSI YHTEENSÄ: ${h}:${m}:${s}\n;;;\n`;
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `tyoaikakoonti_${valittuKK}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        window.onload = () => { taytaKuukaudet(); paivitaKayttajalista(); };
+        window.onscroll = () => { document.getElementById('parallaxBg').style.transform = `translateY(${window.pageYOffset / 3}px)`; };
+    </script>
+</body>
+</html>
