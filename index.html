@@ -38,7 +38,7 @@
         .search-item strong { color: #007bff; display: block; }
         .search-item span { color: #666; font-size: 11px; }
 
-        .btn { padding: 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; text-align: center; font-size: 14px; text-decoration: none; display: block; margin-bottom: 5px; width: 100%; }
+        .btn { padding: 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; text-align: center; font-size: 14px; text-decoration: none; display: block; margin-bottom: 5px; width: 100%; box-sizing: border-box; }
         .btn-add-manual { background: #6f42c1; color: white; }
         .btn-import { background: #28a745; color: white; }
         .btn-export { background: #007bff; color: white; }
@@ -79,9 +79,40 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             cursor: pointer;
         }
+
+        .name-container { display: flex; align-items: center; gap: 10px; }
+        .edit-name-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: #007bff; padding: 0; }
+
+        /* MODAALI RYHMÄN VALINTAAN */
+        #group-modal {
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: white; padding: 25px; border-radius: 15px; width: 300px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3); text-align: center;
+        }
+
+        .checkbox-container { display: flex; align-items: center; gap: 10px; margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #ddd; }
+        .checkbox-container input { width: 20px; height: 20px; cursor: pointer; margin: 0; }
+        .checkbox-container label { font-size: 14px; font-weight: bold; color: #333; cursor: pointer; }
     </style>
 </head>
 <body>
+
+    <div id="group-modal">
+        <div class="modal-content">
+            <h3 style="margin-top: 0;">Valitse ryhmä</h3>
+            <select id="modal-group-select">
+                <option value="Tilasäiliö">Tilasäiliö</option>
+                <option value="Kauppa">Kauppa</option>
+                <option value="Julkinen">Julkinen</option>
+                <option value="Käytönvalvonta">Käytönvalvonta</option>
+                <option value="muut" selected>muut</option>
+            </select>
+            <button class="save-btn" onclick="confirmGroupSelection()">VALITSE</button>
+        </div>
+    </div>
 
     <div class="controls">
         <div class="filter-container">
@@ -91,6 +122,7 @@
                 <option value="Tilasäiliö">🥛 Tilasäiliö</option>
                 <option value="Kauppa">🛒 Kauppa</option>
                 <option value="Julkinen">🏢 Julkinen</option>
+                <option value="Käytönvalvonta">🛡️ Käytönvalvonta</option>
                 <option value="muut">📦 Muut</option>
             </select>
         </div>
@@ -102,10 +134,10 @@
         <button onclick="toggleSettings()" class="btn btn-settings">⚙️ Asetukset & Työkalut</button>
         <div id="settings-menu">
             <button onclick="addNewManual()" class="btn btn-add-manual">➕ LISÄÄ ASIAKAS KÄSIN</button>
-            <label for="excel-upload" class="btn btn-import">📥 TUO ASIAKKAAT (.xlsx)</label>
+            <label for="excel-upload" class="btn btn-import">📥 LATAA ASIAKKAAT</label>
             <input type="file" id="excel-upload" accept=".xlsx, .xls" />
             <div id="status-text">Valmiina</div>
-            <button onclick="exportToExcel()" class="btn btn-export">📤 LATAA EXCEL (KOORDINAATIT)</button>
+            <button onclick="exportToExcel()" class="btn btn-export">📤 VARMUUSKOPIOINTI</button>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
             <button onclick="clearAllData()" class="btn btn-clear">⚠️ Tyhjennä koko kartta</button>
         </div>
@@ -113,17 +145,26 @@
 
     <div id="info-panel">
         <div class="close-btn" onclick="closePanel()">&times;</div>
-        <h2 id="disp-name" style="margin: 0; color: #007bff;">-</h2>
+        <div class="name-container">
+            <h2 id="disp-name" style="margin: 0; color: #007bff;">-</h2>
+            <button class="edit-name-btn" onclick="renameCustomer()" title="Muokkaa nimeä">✏️</button>
+        </div>
         
         <div class="info-label">Osoite</div>
         <div id="disp-address" class="info-value">-</div>
         <button class="edit-addr-btn" id="btn-edit-address" onclick="updateCustomerAddress()">✏️ Muokkaa osoitetta</button>
         
+        <div class="checkbox-container">
+            <input type="checkbox" id="edit-monitoring">
+            <label for="edit-monitoring">Käytönvalvonta</label>
+        </div>
+
         <div class="info-label">Ryhmä</div>
         <select id="edit-group">
             <option value="Tilasäiliö">Tilasäiliö</option>
             <option value="Kauppa">Kauppa</option>
             <option value="Julkinen">Julkinen</option>
+            <option value="Käytönvalvonta">Käytönvalvonta</option>
             <option value="muut">muut</option>
         </select>
 
@@ -160,6 +201,7 @@
         let markers = [];
         let currentIndex = null;
         let isRelocating = false;
+        let pendingNewCustomer = null;
 
         const icons = {
             blue: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
@@ -169,6 +211,19 @@
         };
 
         renderMarkers();
+        checkBackupReminder();
+
+        function checkBackupReminder() {
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+            const lastBackup = localStorage.getItem('lastBackupDate');
+            
+            if (now.getHours() >= 7 && lastBackup !== todayStr) {
+                setTimeout(() => {
+                    alert("⚠️ HUOMIO: Päivän varmuuskopiota ei ole vielä ladattu. Muistathan ladata Excel-tiedoston!");
+                }, 2000);
+            }
+        }
 
         function handleSearch() {
             const query = document.getElementById('search-input').value.toLowerCase();
@@ -178,7 +233,7 @@
             
             const filtered = asiakkaat.map((a, i) => ({...a, originalIndex: i})).filter(a => {
                 const matchesSearch = a.name.toLowerCase().includes(query) || a.address.toLowerCase().includes(query);
-                const matchesFilter = (currentFilter === "Kaikki" || a.group === currentFilter);
+                const matchesFilter = (currentFilter === "Kaikki" || a.group === currentFilter || (currentFilter === "Käytönvalvonta" && a.monitoring));
                 return matchesSearch && matchesFilter;
             });
 
@@ -225,7 +280,10 @@
             const currentFilter = document.getElementById('group-filter').value;
 
             asiakkaat.forEach((a, index) => {
-                if (currentFilter === "Kaikki" || a.group === currentFilter) {
+                const isMonitoringGroup = (currentFilter === "Käytönvalvonta" && (a.monitoring === true || a.group === "Käytönvalvonta"));
+                const isNormalGroup = (a.group === currentFilter);
+                
+                if (currentFilter === "Kaikki" || isNormalGroup || isMonitoringGroup) {
                     const m = L.marker([a.lat, a.lon], { icon: getMarkerColor(a) }).addTo(map);
                     
                     m.bindTooltip(a.name, { 
@@ -237,13 +295,10 @@
                         if (isRelocating) return;
                         L.DomEvent.stopPropagation(e);
                         
-                        // JOS tooltip ei ole vielä auki, avataan se (ensimmäinen painallus)
                         if (!m.isTooltipOpen()) {
-                            // Suljetaan muut tooltipit ensin
                             markers.forEach(otherM => otherM.closeTooltip());
                             m.openTooltip();
                         } else {
-                            // JOS tooltip on jo auki, avataan paneeli (toinen painallus)
                             map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
                             openPanel(index);
                         }
@@ -260,6 +315,7 @@
             document.getElementById('disp-name').innerText = a.name;
             document.getElementById('disp-address').innerText = a.address;
             document.getElementById('edit-group').value = a.group || "muut";
+            document.getElementById('edit-monitoring').checked = a.monitoring || false;
             
             const dateInput = document.getElementById('edit-service-date');
             if (a.lastService && a.lastService !== "-" && a.lastService !== "") {
@@ -272,6 +328,16 @@
             document.getElementById('edit-notes').value = a.notes || "";
             document.getElementById('edit-interval').value = a.interval || "12";
             document.getElementById('info-panel').classList.add('active');
+        }
+
+        function renameCustomer() {
+            if (currentIndex === null) return;
+            const uusiNimi = prompt("Anna uusi nimi asiakkaalle:", asiakkaat[currentIndex].name);
+            if (uusiNimi && uusiNimi.trim() !== "") {
+                asiakkaat[currentIndex].name = uusiNimi.trim();
+                document.getElementById('disp-name').innerText = asiakkaat[currentIndex].name;
+                updateStorage();
+            }
         }
 
         function markAsServiced() {
@@ -289,6 +355,7 @@
                 asiakkaat[currentIndex].notes = document.getElementById('edit-notes').value;
                 asiakkaat[currentIndex].interval = document.getElementById('edit-interval').value;
                 asiakkaat[currentIndex].group = document.getElementById('edit-group').value;
+                asiakkaat[currentIndex].monitoring = document.getElementById('edit-monitoring').checked;
                 
                 const uusiPvm = document.getElementById('edit-service-date').value;
                 if (uusiPvm) {
@@ -313,6 +380,25 @@
             
             markers.forEach(m => m.closeTooltip());
             map.flyTo(FINLAND_CENTER, FINLAND_ZOOM);
+        }
+
+        // MODAALIN TOIMINNOT
+        function openGroupModal(customerData) {
+            pendingNewCustomer = customerData;
+            document.getElementById('group-modal').style.display = 'flex';
+        }
+
+        function confirmGroupSelection() {
+            const group = document.getElementById('modal-group-select').value;
+            if (pendingNewCustomer) {
+                pendingNewCustomer.group = group;
+                if (group === "Käytönvalvonta") pendingNewCustomer.monitoring = true;
+                asiakkaat.push(pendingNewCustomer);
+                updateStorage();
+                openPanel(asiakkaat.length - 1);
+            }
+            document.getElementById('group-modal').style.display = 'none';
+            pendingNewCustomer = null;
         }
 
         document.getElementById('excel-upload').addEventListener('change', function(e) {
@@ -374,7 +460,8 @@
                             group: ryhma,
                             lat: parseFloat(lat),
                             lon: parseFloat(lon),
-                            isServiced: (huolto !== "-")
+                            isServiced: (huolto !== "-"),
+                            monitoring: (ryhma === "Käytönvalvonta")
                         });
                     }
                 }
@@ -413,16 +500,14 @@
             if (!nimi) return;
             const osoite = prompt("Asiakkaan osoite:");
             if (!osoite) return;
-            const ryhma = prompt("Ryhmä (Tilasäiliö, Kauppa, Julkinen, muut):", "muut");
+            
             try {
                 const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(osoite)}`);
                 const data = await res.json();
                 if (data && data[0]) {
                     const lat = parseFloat(data[0].lat);
                     const lon = parseFloat(data[0].lon);
-                    asiakkaat.push({ name: nimi, address: data[0].display_name, lastService: "-", notes: "", interval: "12", group: ryhma, lat: lat, lon: lon, isServiced: false });
-                    updateStorage();
-                    openPanel(asiakkaat.length - 1);
+                    openGroupModal({ name: nimi, address: data[0].display_name, lastService: "-", notes: "", interval: "12", group: "muut", monitoring: false, lat: lat, lon: lon, isServiced: false });
                 }
             } catch (e) { alert("Virhe."); }
         }
@@ -459,20 +544,29 @@
         function exportToExcel() {
             if (asiakkaat.length === 0) return alert("Ei tietoja!");
             const exportData = asiakkaat.map(a => ({
-                "Nimi": a.name, "Osoite": a.address, "Ryhmä": a.group, "Viimeisin huolto": a.lastService, 
-                "Huoltoväli (kk)": a.interval, "Muistiinpanot": a.notes, "Lat": a.lat, "Lon": a.lon
+                "Nimi": a.name, 
+                "Osoite": a.address, 
+                "Ryhmä": a.group, 
+                "Viimeisin huolto": a.lastService, 
+                "Huoltoväli (kk)": a.interval, 
+                "Muistiinpanot": a.notes, 
+                "Lat": a.lat, 
+                "Lon": a.lon,
+                "Huollettu": a.isServiced ? "Kyllä" : "Ei",
+                "Käytönvalvonta": a.monitoring ? "Kyllä" : "Ei"
             }));
             const worksheet = XLSX.utils.json_to_sheet(exportData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Asiakkaat");
-            XLSX.writeFile(workbook, "Asiakkaat_Ryhmilla.xlsx");
+            XLSX.writeFile(workbook, "Asiakkaat_Varmuuskopio.xlsx");
+            
+            localStorage.setItem('lastBackupDate', new Date().toISOString().split('T')[0]);
         }
 
         map.on('click', async (e) => {
             const lat = e.latlng.lat;
             const lon = e.latlng.lng;
             
-            // Suljetaan tooltipit kun klikataan tyhjää karttaa
             markers.forEach(m => m.closeTooltip());
 
             if (isRelocating && currentIndex !== null) {
@@ -498,9 +592,7 @@
             } catch (err) { osoite = "Virhe"; }
             const nimi = prompt(`Lisää uusi asiakas sijaintiin:\n${osoite}\n\nNimi:`);
             if (nimi) {
-                const ryhma = prompt("Ryhmä (Tilasäiliö, Kauppa, Julkinen, muut):", "muut");
-                asiakkaat.push({ name: nimi, address: osoite, lastService: "-", notes: "", interval: "12", group: ryhma, lat: lat, lon: lon, isServiced: false });
-                updateStorage();
+                openGroupModal({ name: nimi, address: osoite, lastService: "-", notes: "", interval: "12", group: "muut", monitoring: false, lat: lat, lon: lon, isServiced: false });
             }
         });
     </script>
