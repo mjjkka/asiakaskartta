@@ -291,14 +291,23 @@
                         offset: [0, -35]
                     });
 
+                    // KORJATTU KAKSIVAIHEINEN VALINTA
                     m.on('click', (e) => {
                         if (isRelocating) return;
                         L.DomEvent.stopPropagation(e);
                         
-                        if (!m.isTooltipOpen()) {
-                            markers.forEach(otherM => otherM.closeTooltip());
+                        const isOpened = m.isTooltipOpen();
+                        
+                        // Suljetaan muut nimikyltit
+                        markers.forEach(otherM => {
+                            if (otherM !== m) otherM.closeTooltip();
+                        });
+
+                        if (!isOpened) {
+                            // Ensimmäinen painallus: avaa vain nimikyltin
                             m.openTooltip();
                         } else {
+                            // Toinen painallus: avaa paneelin
                             map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
                             openPanel(index);
                         }
@@ -418,6 +427,12 @@
                     let raakaHuolto = r["Viimeisin huolto"] || r.huolto || "-";
                     let huolto = "-";
                     let ryhma = r.Ryhmä || r.ryhma || "muut";
+                    
+                    let kaytonvalvonta = false;
+                    const kvArvo = r["Käytönvalvonta"] || r.kaytonvalvonta;
+                    if (kvArvo && (kvArvo.toString().toLowerCase() === "kyllä" || kvArvo === true)) {
+                        kaytonvalvonta = true;
+                    }
 
                     if (raakaHuolto && raakaHuolto !== "-") {
                         let d;
@@ -461,7 +476,7 @@
                             lat: parseFloat(lat),
                             lon: parseFloat(lon),
                             isServiced: (huolto !== "-"),
-                            monitoring: (ryhma === "Käytönvalvonta")
+                            monitoring: kaytonvalvonta
                         });
                     }
                 }
