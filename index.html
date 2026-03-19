@@ -61,7 +61,7 @@
         .info-label { font-size: 12px; color: #888; text-transform: uppercase; font-weight: bold; margin-top: 15px; }
         .info-value { font-size: 16px; color: #333; margin-bottom: 5px; font-weight: 500; }
         
-        select, textarea, input[type="date"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-top: 5px; box-sizing: border-box; font-family: inherit; }
+        select, textarea, input[type="date"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-top: 5px; box-sizing: border-box; font-family: inherit; min-height: 45px; }
         textarea { height: 80px; resize: none; }
         
         .save-btn { width: 100%; background: #007bff; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
@@ -96,6 +96,10 @@
         .checkbox-container { display: flex; align-items: center; gap: 10px; margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #ddd; }
         .checkbox-container input { width: 20px; height: 20px; cursor: pointer; margin: 0; }
         .checkbox-container label { font-size: 14px; font-weight: bold; color: #333; cursor: pointer; }
+
+        @media screen and (max-width: 600px) {
+            #info-panel { width: 100%; right: -100%; }
+        }
     </style>
 </head>
 <body>
@@ -140,7 +144,7 @@
             <button onclick="exportToExcel()" class="btn btn-export">📤 VARMUUSKOPIOINTI</button>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
             <button onclick="clearAllData()" class="btn btn-clear">⚠️ Tyhjennä koko kartta</button>
-            <div class="version-text">v.3.11</div>
+            <div class="version-text">v.3.12</div>
         </div>
     </div>
 
