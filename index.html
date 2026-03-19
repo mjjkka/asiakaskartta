@@ -291,23 +291,19 @@
                         offset: [0, -35]
                     });
 
-                    // KORJATTU KAKSIVAIHEINEN VALINTA
                     m.on('click', (e) => {
                         if (isRelocating) return;
                         L.DomEvent.stopPropagation(e);
                         
                         const isOpened = m.isTooltipOpen();
                         
-                        // Suljetaan muut nimikyltit
                         markers.forEach(otherM => {
                             if (otherM !== m) otherM.closeTooltip();
                         });
 
                         if (!isOpened) {
-                            // Ensimmäinen painallus: avaa vain nimikyltin
                             m.openTooltip();
                         } else {
-                            // Toinen painallus: avaa paneelin
                             map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
                             openPanel(index);
                         }
@@ -391,7 +387,6 @@
             map.flyTo(FINLAND_CENTER, FINLAND_ZOOM);
         }
 
-        // MODAALIN TOIMINNOT
         function openGroupModal(customerData) {
             pendingNewCustomer = customerData;
             document.getElementById('group-modal').style.display = 'flex';
@@ -427,6 +422,7 @@
                     let raakaHuolto = r["Viimeisin huolto"] || r.huolto || "-";
                     let huolto = "-";
                     let ryhma = r.Ryhmä || r.ryhma || "muut";
+                    let nimi = r.Nimi || r.nimi || "Nimetön";
                     
                     let kaytonvalvonta = false;
                     const kvArvo = r["Käytönvalvonta"] || r.kaytonvalvonta;
@@ -466,8 +462,8 @@
                     }
 
                     if (lat && lon) {
-                        asiakkaat.push({
-                            name: r.Nimi || r.nimi || "Nimetön",
+                        const uudetTiedot = {
+                            name: nimi,
                             address: osoite || "-",
                             lastService: huolto,
                             notes: r.Muistiinpanot || r.muistiinpanot || "",
@@ -477,7 +473,15 @@
                             lon: parseFloat(lon),
                             isServiced: (huolto !== "-"),
                             monitoring: kaytonvalvonta
-                        });
+                        };
+
+                        const olemassaOlevaIndeksi = asiakkaat.findIndex(a => a.name.toLowerCase() === nimi.toLowerCase());
+
+                        if (olemassaOlevaIndeksi !== -1) {
+                            asiakkaat[olemassaOlevaIndeksi] = uudetTiedot;
+                        } else {
+                            asiakkaat.push(uudetTiedot);
+                        }
                     }
                 }
                 status.innerText = "Valmis!";
