@@ -50,6 +50,23 @@
         #settings-menu { display: none; border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px; }
         .version-text { font-size: 10px; color: #ccc; text-align: center; margin-top: 10px; }
 
+        #unsaved-alert { 
+            display: none; background: #fff3f3; border: 1px solid #dc3545; 
+            padding: 10px; border-radius: 8px; color: #dc3545; 
+            font-size: 12px; font-weight: bold; text-align: center;
+        }
+        #unsaved-alert a { color: #007bff; text-decoration: underline; cursor: pointer; }
+
+        #stat-counter {
+            position: absolute; bottom: 20px; left: 20px; z-index: 1000;
+            background: white; padding: 12px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15); font-size: 12px;
+            display: flex; flex-direction: column; gap: 4px; min-width: 160px;
+        }
+        .stat-row { display: flex; justify-content: space-between; align-items: center; }
+        .stat-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .stat-total { border-top: 1px solid #eee; margin-top: 4px; padding-top: 4px; font-weight: bold; }
+
         #info-panel {
             position: absolute; right: -450px; top: 0; width: 400px; height: 100vh;
             background: white; z-index: 1001; transition: 0.4s ease;
@@ -135,6 +152,12 @@
             <input type="text" id="search-input" placeholder="Hae nimellä tai osoitteella..." oninput="handleSearch()">
             <div id="search-results"></div>
         </div>
+
+        <div id="unsaved-alert">
+            ⚠️ Tallentamattomia muutoksia!<br>
+            <a onclick="exportToExcel()">Lataa varmuuskopio nyt</a>
+        </div>
+
         <button onclick="toggleSettings()" class="btn btn-settings">⚙️ Asetukset & Työkalut</button>
         <div id="settings-menu">
             <button onclick="addNewManual()" class="btn btn-add-manual">➕ LISÄÄ ASIAKAS KÄSIN</button>
@@ -144,8 +167,16 @@
             <button onclick="exportToExcel()" class="btn btn-export">📤 VARMUUSKOPIOINTI</button>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
             <button onclick="clearAllData()" class="btn btn-clear">⚠️ Tyhjennä koko kartta</button>
-            <div class="version-text">v.3.12</div>
+            <div class="version-text">v.3.24</div>
         </div>
+    </div>
+
+    <div id="stat-counter">
+        <div class="stat-row"><span><span class="stat-dot" style="background: #28a745;"></span>Huollettu:</span><strong id="count-green">0</strong></div>
+        <div class="stat-row"><span><span class="stat-dot" style="background: #ffc107;"></span>Huolto ajankohtainen:</span><strong id="count-yellow">0</strong></div>
+        <div class="stat-row"><span><span class="stat-dot" style="background: #dc3545;"></span>Huolto myöhässä:</span><strong id="count-red">0</strong></div>
+        <div class="stat-row"><span><span class="stat-dot" style="background: #007bff;"></span>Ei huolto merkintää:</span><strong id="count-blue">0</strong></div>
+        <div class="stat-row stat-total"><span>Yhteensä:</span><strong id="count-total">0</strong></div>
     </div>
 
     <div id="info-panel">
@@ -207,6 +238,7 @@
         let currentIndex = null;
         let isRelocating = false;
         let pendingNewCustomer = null;
+        let hasUnsavedChanges = false;
 
         const icons = {
             blue: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
@@ -265,32 +297,37 @@
         });
 
         function getMarkerColor(a) {
-            if (!a.isServiced || !a.lastService || a.lastService === "-" || a.lastService === "") return icons.blue;
+            if (!a.isServiced || !a.lastService || a.lastService === "-" || a.lastService === "") return 'blue';
             const viimeHuolto = new Date(a.lastService);
-            if (isNaN(viimeHuolto.getTime())) return icons.blue;
+            if (isNaN(viimeHuolto.getTime())) return 'blue';
             const tänään = new Date();
             const vali = parseInt(a.interval || 12);
             const seuraavaHuolto = new Date(viimeHuolto);
             seuraavaHuolto.setMonth(seuraavaHuolto.getMonth() + vali);
             const varoitusRaja = new Date(seuraavaHuolto);
             varoitusRaja.setMonth(varoitusRaja.getMonth() - 2);
-            if (tänään >= seuraavaHuolto) return icons.red;
-            if (tänään >= varoitusRaja) return icons.yellow;
-            return icons.green;
+            if (tänään >= seuraavaHuolto) return 'red';
+            if (tänään >= varoitusRaja) return 'yellow';
+            return 'green';
         }
 
         function renderMarkers() {
             markers.forEach(m => map.removeLayer(m));
             markers = [];
             const currentFilter = document.getElementById('group-filter').value;
+            
+            let stats = { green: 0, yellow: 0, red: 0, blue: 0 };
 
             asiakkaat.forEach((a, index) => {
                 const isMonitoringGroup = (currentFilter === "Käytönvalvonta" && (a.monitoring === true || a.group === "Käytönvalvonta"));
                 const isNormalGroup = (a.group === currentFilter);
                 
                 if (currentFilter === "Kaikki" || isNormalGroup || isMonitoringGroup) {
-                    const m = L.marker([a.lat, a.lon], { icon: getMarkerColor(a) }).addTo(map);
+                    const colorKey = getMarkerColor(a);
+                    const m = L.marker([a.lat, a.lon], { icon: icons[colorKey] }).addTo(map);
                     
+                    stats[colorKey]++;
+
                     m.bindTooltip(a.name, { 
                         direction: 'top', 
                         offset: [0, -35]
@@ -317,6 +354,15 @@
                     markers.push(m);
                 }
             });
+            
+            const total = stats.green + stats.yellow + stats.red + stats.blue;
+            document.getElementById('count-green').innerText = stats.green;
+            document.getElementById('count-yellow').innerText = stats.yellow;
+            document.getElementById('count-red').innerText = stats.red;
+            document.getElementById('count-blue').innerText = stats.blue;
+            document.getElementById('count-total').innerText = total;
+
+            document.getElementById('unsaved-alert').style.display = hasUnsavedChanges ? 'block' : 'none';
         }
 
         function openPanel(index) {
@@ -346,6 +392,7 @@
             if (uusiNimi && uusiNimi.trim() !== "") {
                 asiakkaat[currentIndex].name = uusiNimi.trim();
                 document.getElementById('disp-name').innerText = asiakkaat[currentIndex].name;
+                hasUnsavedChanges = true;
                 updateStorage();
             }
         }
@@ -355,6 +402,7 @@
                 const tänään = new Date().toISOString().split('T')[0];
                 asiakkaat[currentIndex].isServiced = true;
                 asiakkaat[currentIndex].lastService = tänään;
+                hasUnsavedChanges = true;
                 updateStorage();
                 openPanel(currentIndex);
             }
@@ -375,6 +423,7 @@
                     asiakkaat[currentIndex].lastService = "-";
                     asiakkaat[currentIndex].isServiced = false;
                 }
+                hasUnsavedChanges = true;
                 updateStorage();
                 alert("Tiedot tallennettu!");
                 closePanel();
@@ -403,6 +452,7 @@
                 pendingNewCustomer.group = group;
                 if (group === "Käytönvalvonta") pendingNewCustomer.monitoring = true;
                 asiakkaat.push(pendingNewCustomer);
+                hasUnsavedChanges = true;
                 updateStorage();
                 openPanel(asiakkaat.length - 1);
             }
@@ -490,6 +540,7 @@
                     }
                 }
                 status.innerText = "Valmis!";
+                hasUnsavedChanges = false;
                 updateStorage();
             };
             reader.readAsBinaryString(file);
@@ -512,6 +563,7 @@
                         asiakkaat[currentIndex].address = data[0].display_name;
                         asiakkaat[currentIndex].lat = parseFloat(data[0].lat);
                         asiakkaat[currentIndex].lon = parseFloat(data[0].lon);
+                        hasUnsavedChanges = true;
                         updateStorage();
                         openPanel(currentIndex);
                     }
@@ -539,6 +591,7 @@
         function deleteSingleCustomer() {
             if (currentIndex !== null && confirm("Poistetaanko asiakas?")) {
                 asiakkaat.splice(currentIndex, 1);
+                hasUnsavedChanges = true;
                 updateStorage();
                 closePanel();
             }
@@ -553,6 +606,7 @@
             if(confirm("⚠️ Oletko varma? Tämä poistaa KAIKKI asiakkaat kartalta lopullisesti.")) {
                 if(confirm("❗ Oletko TÄYSIN varma? Tätä toimintoa ei voi peruuttaa.")) {
                     asiakkaat = [];
+                    hasUnsavedChanges = true;
                     updateStorage();
                     toggleSettings();
                     alert("Kartta tyhjennetty.");
@@ -585,6 +639,8 @@
             XLSX.writeFile(workbook, "Asiakkaat_Varmuuskopio.xlsx");
             
             localStorage.setItem('lastBackupDate', new Date().toISOString().split('T')[0]);
+            hasUnsavedChanges = false;
+            renderMarkers();
         }
 
         map.on('click', async (e) => {
@@ -592,6 +648,16 @@
             const lon = e.latlng.lng;
             
             markers.forEach(m => m.closeTooltip());
+
+            if (document.getElementById('settings-menu').style.display === 'block') {
+                document.getElementById('settings-menu').style.display = 'none';
+                return;
+            }
+
+            if (document.getElementById('info-panel').classList.contains('active') && !isRelocating) {
+                closePanel();
+                return;
+            }
 
             if (isRelocating && currentIndex !== null) {
                 try {
@@ -601,6 +667,7 @@
                     asiakkaat[currentIndex].lon = lon;
                     asiakkaat[currentIndex].address = data.display_name || "Tuntematon";
                     isRelocating = false;
+                    hasUnsavedChanges = true;
                     document.getElementById('map').classList.remove('map-select-active');
                     updateStorage();
                     openPanel(currentIndex);
