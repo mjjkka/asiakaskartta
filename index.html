@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Asiakaskartta Pro - v3.28</title>
+    <title>Asiakaskartta Pro - v3.37</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -146,9 +146,9 @@
 
     <div id="login-overlay">
         <div class="login-box">
-            <h2>Asiakaskartta Pro</h2>
+            <h2>SFT Huoltokartta</h2>
             <input type="text" id="login-user" placeholder="Käyttäjätunnus">
-            <input type="password" id="login-pass" placeholder="Salasana">
+            <input type="password" id="login-pass" placeholder="Salasana" onkeydown="if(event.key === 'Enter') checkLogin()">
             <button onclick="checkLogin()">Kirjaudu sisään</button>
             <p id="login-error" style="color:red; font-size:12px; margin-top:10px; display:none;">Virheelliset tunnukset!</p>
         </div>
@@ -158,11 +158,11 @@
         <div class="modal-content">
             <h3 style="margin-top: 0;">Valitse ryhmä</h3>
             <select id="modal-group-select">
-                <option value="Tilasäiliö">Tilasäiliö</option>
-                <option value="Kauppa">Kauppa</option>
-                <option value="Julkinen">Julkinen</option>
-                <option value="Käytönvalvonta">Käytönvalvonta</option>
-                <option value="muut" selected>muut</option>
+                <option value="Tilasäiliö" id="opt-m-tilasailio">Tilasäiliö</option>
+                <option value="Kauppa" id="opt-m-kauppa">Kauppa</option>
+                <option value="Julkinen" id="opt-m-julkinen">Julkinen</option>
+                <option value="Käytönvalvonta" id="opt-m-kv">Käytönvalvonta</option>
+                <option value="muut" id="opt-m-muut" selected>muut</option>
             </select>
             <button class="save-btn" onclick="confirmGroupSelection()">VALITSE</button>
         </div>
@@ -172,12 +172,12 @@
         <div class="filter-container">
             <label class="filter-label">Näytä ryhmä:</label>
             <select id="group-filter" onchange="renderMarkers()">
-                <option value="Kaikki">🌍 Kaikki asiakkaat</option>
+                <option value="Kaikki" id="opt-kaikki">🌍 Kaikki asiakkaat</option>
                 <option value="Tilasäiliö">🥛 Tilasäiliö</option>
-                <option value="Kauppa">🛒 Kauppa</option>
-                <option value="Julkinen">🏢 Julkinen</option>
-                <option value="Käytönvalvonta">🛡️ Käytönvalvonta</option>
-                <option value="muut">📦 Muut</option>
+                <option value="Kauppa" id="opt-kauppa">🛒 Kauppa</option>
+                <option value="Julkinen" id="opt-julkinen">🏢 Julkinen</option>
+                <option value="Käytönvalvonta" id="opt-kv">🛡️ Käytönvalvonta</option>
+                <option value="muut" id="opt-muut">📦 Muut</option>
             </select>
         </div>
 
@@ -194,13 +194,13 @@
         <button onclick="toggleSettings()" class="btn btn-settings">⚙️ Asetukset & Työkalut</button>
         <div id="settings-menu">
             <button onclick="addNewManual()" class="btn btn-add-manual">➕ LISÄÄ ASIAKAS KÄSIN</button>
-            <label for="excel-upload" class="btn btn-import">📥 LATAA ASIAKKAAT</label>
+            <label for="excel-upload" class="btn btn-import" id="btn-import-label">📥 LATAA ASIAKKAAT</label>
             <input type="file" id="excel-upload" accept=".xlsx, .xls" />
             <div id="status-text">Valmiina</div>
-            <button onclick="exportToExcel()" class="btn btn-export">📤 VARMUUSKOPIOINTI</button>
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
-            <button onclick="clearAllData()" class="btn btn-clear">⚠️ Tyhjennä koko kartta</button>
-            <div class="version-text">v.3.28</div>
+            <button onclick="exportToExcel()" class="btn btn-export" id="btn-export">📤 VARMUUSKOPIOINTI</button>
+            <hr id="settings-hr" style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
+            <button onclick="clearAllData()" class="btn btn-clear" id="btn-clear">⚠️ Tyhjennä koko kartta</button>
+            <div class="version-text">v.3.37</div>
         </div>
     </div>
 
@@ -223,7 +223,7 @@
         <div id="disp-address" class="info-value">-</div>
         <button class="edit-addr-btn" id="btn-edit-address" onclick="updateCustomerAddress()">✏️ Muokkaa osoitetta</button>
         
-        <div class="checkbox-container">
+        <div class="checkbox-container" id="kv-checkbox-container">
             <input type="checkbox" id="edit-monitoring" onchange="toggleMonitoringSection()">
             <label for="edit-monitoring">Käytönvalvonta</label>
         </div>
@@ -267,24 +267,55 @@
         function checkLogin() {
             const user = document.getElementById('login-user').value;
             const pass = document.getElementById('login-pass').value;
-            if (user === "sft" && pass === "8448") {
+            
+            if ((user === "sft" && pass === "8448") || (user === "Antero" && pass === "3003")) {
                 sessionStorage.setItem('loggedIn', 'true');
+                sessionStorage.setItem('currentUser', user);
                 document.getElementById('login-overlay').style.display = 'none';
+                
+                applyUserPermissions();
+                checkBackupReminder();
+                renderMarkers();
             } else {
                 document.getElementById('login-error').style.display = 'block';
             }
         }
 
-        if (sessionStorage.getItem('loggedIn') === 'true') {
-            document.getElementById('login-overlay').style.display = 'none';
+        function applyUserPermissions() {
+            const user = sessionStorage.getItem('currentUser');
+            if (user === "Antero") {
+                const filter = document.getElementById('group-filter');
+                filter.value = "Tilasäiliö";
+                document.getElementById('opt-kaikki').style.display = 'none';
+                document.getElementById('opt-kauppa').style.display = 'none';
+                document.getElementById('opt-julkinen').style.display = 'none';
+                document.getElementById('opt-kv').style.display = 'none';
+                document.getElementById('opt-muut').style.display = 'none';
+                filter.disabled = true;
+
+                document.getElementById('btn-import-label').style.display = 'none';
+                document.getElementById('btn-export').style.display = 'none';
+                document.getElementById('btn-clear').style.display = 'none';
+                document.getElementById('settings-hr').style.display = 'none';
+                document.getElementById('unsaved-alert').style.display = 'none';
+
+                document.getElementById('edit-group').disabled = true;
+                document.getElementById('kv-checkbox-container').style.display = 'none';
+                document.getElementById('opt-m-kauppa').style.display = 'none';
+                document.getElementById('opt-m-julkinen').style.display = 'none';
+                document.getElementById('opt-m-kv').style.display = 'none';
+                document.getElementById('opt-m-muut').style.display = 'none';
+                document.getElementById('modal-group-select').value = "Tilasäiliö";
+                document.getElementById('modal-group-select').disabled = true;
+            }
         }
 
         // --- KARTTALOGIIKKA ---
-        const FINLAND_CENTER = [64.5, 26.0];
-        const FINLAND_ZOOM = 6; 
+        const FINLAND_CENTER = [63.37, 23.47]; // Evijärvi
+        const FINLAND_ZOOM = 7; 
         const CUSTOMER_ZOOM = 11;
 
-        const map = L.map('map', { zoomControl: false }).setView(FINLAND_CENTER, FINLAND_ZOOM);
+        const map = L.map('map', { zoomControl: false, minZoom: 7 }).setView(FINLAND_CENTER, FINLAND_ZOOM);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
@@ -302,10 +333,15 @@
             red: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] })
         };
 
-        renderMarkers();
-        checkBackupReminder();
+        if (sessionStorage.getItem('loggedIn') === 'true') {
+            document.getElementById('login-overlay').style.display = 'none';
+            applyUserPermissions();
+            checkBackupReminder();
+            renderMarkers();
+        }
 
         function checkBackupReminder() {
+            if (sessionStorage.getItem('currentUser') === "Antero") return;
             const now = new Date();
             const todayStr = now.toISOString().split('T')[0];
             const lastBackup = localStorage.getItem('lastBackupDate');
@@ -313,7 +349,7 @@
             if (now.getHours() >= 7 && lastBackup !== todayStr) {
                 setTimeout(() => {
                     alert("⚠️ HUOMIO: Päivän varmuuskopiota ei ole vielä ladattu. Muistathan ladata Excel-tiedoston!");
-                }, 2000);
+                }, 1000);
             }
         }
 
@@ -344,17 +380,45 @@
             const a = asiakkaat[index];
             document.getElementById('search-input').value = a.name;
             document.getElementById('search-results').style.display = 'none';
-            map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
+            
+            const targetMarker = markers.find(m => {
+                const latlng = m.getLatLng();
+                return latlng.lat === a.lat && latlng.lng === a.lon;
+            });
+
+            if (targetMarker) {
+                const originalIcon = targetMarker.options.icon;
+                const largeIcon = L.icon({
+                    ...originalIcon.options,
+                    iconSize: [50, 82],
+                    iconAnchor: [25, 82],
+                    popupAnchor: [1, -68],
+                    shadowSize: [82, 82]
+                });
+
+                targetMarker.setIcon(largeIcon);
+                setTimeout(() => {
+                    targetMarker.setIcon(originalIcon);
+                }, 3000);
+            }
+
+            let optimalZoom = CUSTOMER_ZOOM;
+            const maxZoom = map.getMaxZoom();
+            
+            for (let z = CUSTOMER_ZOOM; z <= maxZoom; z++) {
+                map.setView([a.lat, a.lon], z, { animate: false });
+                const currentBounds = map.getBounds();
+                const visibleCount = asiakkaat.filter(c => currentBounds.contains([c.lat, c.lon])).length;
+                
+                if (visibleCount <= 15) {
+                    optimalZoom = z;
+                    break;
+                }
+            }
+
+            map.flyTo([a.lat, a.lon], optimalZoom);
             openPanel(index);
         }
-
-        document.addEventListener('click', (e) => { 
-            const controls = document.querySelector('.controls');
-            if (controls && !controls.contains(e.target)) {
-                document.getElementById('search-results').style.display = 'none';
-                document.getElementById('settings-menu').style.display = 'none';
-            }
-        });
 
         function getMarkerColor(a) {
             const currentFilter = document.getElementById('group-filter').value;
@@ -364,7 +428,7 @@
 
             if (currentFilter === "Käytönvalvonta") {
                 targetDate = a.monitoringDate;
-                interval = 12;
+                interval = 6; 
             }
 
             if (!targetDate || targetDate === "-" || targetDate === "") return 'blue';
@@ -409,13 +473,10 @@
                         if (isRelocating) return;
                         L.DomEvent.stopPropagation(e);
                         
-                        const isOpened = m.isTooltipOpen();
-                        
-                        markers.forEach(otherM => {
-                            if (otherM !== m) otherM.closeTooltip();
-                        });
-
-                        if (!isOpened) {
+                        if (!m.isTooltipOpen()) {
+                            markers.forEach(otherM => {
+                                if (otherM !== m) otherM.closeTooltip();
+                            });
                             m.openTooltip();
                         } else {
                             map.flyTo([a.lat, a.lon], CUSTOMER_ZOOM);
@@ -434,7 +495,9 @@
             document.getElementById('count-blue').innerText = stats.blue;
             document.getElementById('count-total').innerText = total;
 
-            document.getElementById('unsaved-alert').style.display = hasUnsavedChanges ? 'block' : 'none';
+            if (sessionStorage.getItem('currentUser') !== "Antero") {
+                document.getElementById('unsaved-alert').style.display = hasUnsavedChanges ? 'block' : 'none';
+            }
         }
 
         function openPanel(index) {
