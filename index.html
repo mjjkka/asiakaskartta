@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Asiakaskartta Pro - v3.41</title>
+    <title>Asiakaskartta Pro - v3.44</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -43,7 +43,14 @@
 
         .filter-container { margin-bottom: 5px; }
         .filter-label { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 3px; display: block; }
-        #group-filter { width: 100%; padding: 8px; border-radius: 8px; border: 2px solid #007bff; font-weight: bold; background: #f0f7ff; }
+        
+        #group-filter, #dairy-filter, #shop-filter { 
+            width: 100%; padding: 8px; border-radius: 8px; 
+            border: 2px solid #007bff; font-weight: bold; 
+            background: #f0f7ff; margin-bottom: 5px; 
+        }
+        
+        #dairy-filter-container, #shop-filter-container { display: none; }
 
         .search-container { position: relative; display: flex; flex-direction: column; gap: 5px; margin-bottom: 5px; }
         #search-input { padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box; }
@@ -136,7 +143,7 @@
         .checkbox-container label { font-size: 14px; font-weight: bold; color: #333; cursor: pointer; }
 
         #monitoring-date-section { display: none; }
-        #dairy-section { display: none; }
+        #dairy-section, #shop-ketju-section { display: none; }
 
         @media screen and (max-width: 600px) {
             #info-panel { width: 100%; right: -100%; }
@@ -172,13 +179,40 @@
     <div class="controls">
         <div class="filter-container">
             <label class="filter-label">Näytä ryhmä:</label>
-            <select id="group-filter" onchange="renderMarkers()">
+            <select id="group-filter" onchange="handleGroupFilterChange()">
                 <option value="Kaikki" id="opt-kaikki">🌍 Kaikki asiakkaat</option>
                 <option value="Tilasäiliö">🥛 Tilasäiliö</option>
                 <option value="Kauppa" id="opt-kauppa">🛒 Kauppa</option>
                 <option value="Julkinen" id="opt-julkinen">🏢 Julkinen</option>
                 <option value="Käytönvalvonta" id="opt-kv">🛡️ Käytönvalvonta</option>
                 <option value="muut" id="opt-muut">📦 Muut</option>
+            </select>
+        </div>
+
+        <div id="dairy-filter-container">
+            <label class="filter-label">Valitse meijeri:</label>
+            <select id="dairy-filter" onchange="renderMarkers()">
+                <option value="Kaikki">🥛 Kaikki meijerit</option>
+                <option value="Maito Suomi">Maito Suomi</option>
+                <option value="Hämeenlinnan Osuusmeijeri">Hämeenlinnan Osuusmeijeri</option>
+                <option value="Emo Maito">Emo Maito</option>
+                <option value="Juustoportti">Juustoportti</option>
+                <option value="Satamaito">Satamaito</option>
+                <option value="Pohjolan Maito">Pohjolan Maito</option>
+                <option value="Maitokolmio">Maitokolmio</option>
+            </select>
+        </div>
+
+        <div id="shop-filter-container">
+            <label class="filter-label">Valitse ketju:</label>
+            <select id="shop-filter" onchange="renderMarkers()">
+                <option value="Kaikki">🛒 Kaikki ketjut</option>
+                <option value="S-Ryhmä">S-Ryhmä</option>
+                <option value="K-Ryhmä">K-Ryhmä</option>
+                <option value="Minimani">Minimani</option>
+                <option value="Halpahalli">Halpahalli</option>
+                <option value="Lidl">Lidl</option>
+                <option value="Muut">Muut Ketjut</option>
             </select>
         </div>
 
@@ -201,7 +235,7 @@
             <button onclick="exportToExcel()" class="btn btn-export" id="btn-export">📤 VARMUUSKOPIOINTI</button>
             <hr id="settings-hr" style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
             <button onclick="clearAllData()" class="btn btn-clear" id="btn-clear">⚠️ Tyhjennä koko kartta</button>
-            <div class="version-text">v.3.41</div>
+            <div class="version-text">v.3.44</div>
         </div>
     </div>
 
@@ -235,7 +269,7 @@
         </div>
 
         <div class="info-label">Ryhmä</div>
-        <select id="edit-group" onchange="toggleDairySection()">
+        <select id="edit-group" onchange="toggleSubSections()">
             <option value="Tilasäiliö">Tilasäiliö</option>
             <option value="Kauppa">Kauppa</option>
             <option value="Julkinen">Julkinen</option>
@@ -254,6 +288,19 @@
                 <option value="Satamaito">Satamaito</option>
                 <option value="Pohjolan Maito">Pohjolan Maito</option>
                 <option value="Maitokolmio">Maitokolmio</option>
+            </select>
+        </div>
+
+        <div id="shop-ketju-section">
+            <div class="info-label">Ketju</div>
+            <select id="edit-shop-ketju">
+                <option value="-">- Valitse -</option>
+                <option value="S-Ryhmä">S-Ryhmä</option>
+                <option value="K-Ryhmä">K-Ryhmä</option>
+                <option value="Minimani">Minimani</option>
+                <option value="Halpahalli">Halpahalli</option>
+                <option value="Lidl">Lidl</option>
+                <option value="Muut">Muut</option>
             </select>
         </div>
 
@@ -293,6 +340,7 @@
                 
                 applyUserPermissions();
                 checkBackupReminder();
+                handleGroupFilterChange(); 
                 renderMarkers();
             } else {
                 document.getElementById('login-error').style.display = 'block';
@@ -304,6 +352,7 @@
             if (user === "Antero" || user === "Maitosuomi") {
                 const filter = document.getElementById('group-filter');
                 filter.value = "Tilasäiliö";
+                
                 document.getElementById('opt-kaikki').style.display = 'none';
                 document.getElementById('opt-kauppa').style.display = 'none';
                 document.getElementById('opt-julkinen').style.display = 'none';
@@ -318,7 +367,8 @@
                 document.getElementById('unsaved-alert').style.display = 'none';
 
                 document.getElementById('edit-group').disabled = true;
-                document.getElementById('edit-dairy').disabled = true; // LUKITTU MEIJERIVALINTA
+                document.getElementById('edit-dairy').disabled = true; 
+                document.getElementById('edit-shop-ketju').disabled = true;
                 document.getElementById('kv-checkbox-container').style.display = 'none';
                 document.getElementById('opt-m-kauppa').style.display = 'none';
                 document.getElementById('opt-m-julkinen').style.display = 'none';
@@ -326,6 +376,14 @@
                 document.getElementById('opt-m-muut').style.display = 'none';
                 document.getElementById('modal-group-select').value = "Tilasäiliö";
                 document.getElementById('modal-group-select').disabled = true;
+
+                const dairyF = document.getElementById('dairy-filter');
+                if (user === "Antero") {
+                    dairyF.value = "Hämeenlinnan Osuusmeijeri";
+                } else if (user === "Maitosuomi") {
+                    dairyF.value = "Maito Suomi";
+                }
+                dairyF.disabled = true;
             }
         }
 
@@ -356,6 +414,7 @@
             document.getElementById('login-overlay').style.display = 'none';
             applyUserPermissions();
             checkBackupReminder();
+            handleGroupFilterChange();
             renderMarkers();
         }
 
@@ -378,16 +437,31 @@
             document.getElementById('monitoring-date-section').style.display = isChecked ? 'block' : 'none';
         }
 
-        function toggleDairySection() {
+        function toggleSubSections() {
             const group = document.getElementById('edit-group').value;
             document.getElementById('dairy-section').style.display = (group === "Tilasäiliö") ? 'block' : 'none';
+            document.getElementById('shop-ketju-section').style.display = (group === "Kauppa") ? 'block' : 'none';
+        }
+
+        function handleGroupFilterChange() {
+            const group = document.getElementById('group-filter').value;
+            document.getElementById('dairy-filter-container').style.display = (group === "Tilasäiliö") ? 'block' : 'none';
+            document.getElementById('shop-filter-container').style.display = (group === "Kauppa") ? 'block' : 'none';
+            
+            if (group !== "Tilasäiliö") document.getElementById('dairy-filter').value = "Kaikki";
+            if (group !== "Kauppa") document.getElementById('shop-filter').value = "Kaikki";
+            
+            renderMarkers();
         }
 
         function handleSearch() {
             const query = document.getElementById('search-input').value.toLowerCase();
             const resultsDiv = document.getElementById('search-results');
             if (!query) { resultsDiv.style.display = 'none'; return; }
+            
             const currentFilter = document.getElementById('group-filter').value;
+            const dairyFilter = document.getElementById('dairy-filter').value;
+            const shopFilter = document.getElementById('shop-filter').value;
             const currentUser = sessionStorage.getItem('currentUser');
             
             const filtered = asiakkaat.map((a, i) => ({...a, originalIndex: i})).filter(a => {
@@ -395,13 +469,15 @@
                 
                 let matchesFilter = (currentFilter === "Kaikki" || a.group === currentFilter || (currentFilter === "Käytönvalvonta" && a.monitoring));
                 
-                // Vieraskäyttäjä-rajoitukset hakuun
-                if (currentUser === "Antero") {
-                    if (a.group !== "Tilasäiliö" || a.dairy !== "Hämeenlinnan Osuusmeijeri") return false;
+                if (currentFilter === "Tilasäiliö" && dairyFilter !== "Kaikki") {
+                    if (a.dairy !== dairyFilter) matchesFilter = false;
                 }
-                if (currentUser === "Maitosuomi") {
-                    if (a.group !== "Tilasäiliö" || a.dairy !== "Maito Suomi") return false;
+                if (currentFilter === "Kauppa" && shopFilter !== "Kaikki") {
+                    if (a.shopKetju !== shopFilter) matchesFilter = false;
                 }
+                
+                if (currentUser === "Antero" && (a.group !== "Tilasäiliö" || a.dairy !== "Hämeenlinnan Osuusmeijeri")) return false;
+                if (currentUser === "Maitosuomi" && (a.group !== "Tilasäiliö" || a.dairy !== "Maito Suomi")) return false;
 
                 return matchesSearch && matchesFilter;
             });
@@ -487,18 +563,18 @@
             markers.forEach(m => map.removeLayer(m));
             markers = [];
             const currentFilter = document.getElementById('group-filter').value;
+            const dairyFilter = document.getElementById('dairy-filter').value;
+            const shopFilter = document.getElementById('shop-filter').value;
             const currentUser = sessionStorage.getItem('currentUser');
             
             let stats = { green: 0, yellow: 0, red: 0, blue: 0 };
 
             asiakkaat.forEach((a, index) => {
-                // Vieraskäyttäjä-rajoitukset
-                if (currentUser === "Antero") {
-                    if (a.group !== "Tilasäiliö" || a.dairy !== "Hämeenlinnan Osuusmeijeri") return;
-                }
-                if (currentUser === "Maitosuomi") {
-                    if (a.group !== "Tilasäiliö" || a.dairy !== "Maito Suomi") return;
-                }
+                if (currentUser === "Antero" && (a.group !== "Tilasäiliö" || a.dairy !== "Hämeenlinnan Osuusmeijeri")) return;
+                if (currentUser === "Maitosuomi" && (a.group !== "Tilasäiliö" || a.dairy !== "Maito Suomi")) return;
+
+                if (currentFilter === "Tilasäiliö" && dairyFilter !== "Kaikki" && a.dairy !== dairyFilter) return;
+                if (currentFilter === "Kauppa" && shopFilter !== "Kaikki" && a.shopKetju !== shopFilter) return;
 
                 const isMonitoringSearch = (currentFilter === "Käytönvalvonta" && (a.monitoring === true || a.group === "Käytönvalvonta"));
                 const isNormalGroup = (a.group === currentFilter);
@@ -552,8 +628,9 @@
             document.getElementById('disp-address').innerText = a.address;
             document.getElementById('edit-group').value = a.group || "muut";
             
-            toggleDairySection();
+            toggleSubSections();
             document.getElementById('edit-dairy').value = a.dairy || "-";
+            document.getElementById('edit-shop-ketju').value = a.shopKetju || "-";
 
             const monitoringCheckbox = document.getElementById('edit-monitoring');
             monitoringCheckbox.checked = a.monitoring || false;
@@ -604,33 +681,27 @@
 
         function saveChanges() {
             if (currentIndex !== null) {
-                asiakkaat[currentIndex].notes = document.getElementById('edit-notes').value;
-                asiakkaat[currentIndex].interval = document.getElementById('edit-interval').value;
-                asiakkaat[currentIndex].group = document.getElementById('edit-group').value;
+                const a = asiakkaat[currentIndex];
+                a.notes = document.getElementById('edit-notes').value;
+                a.interval = document.getElementById('edit-interval').value;
+                a.group = document.getElementById('edit-group').value;
                 
-                if (asiakkaat[currentIndex].group === "Tilasäiliö") {
-                    asiakkaat[currentIndex].dairy = document.getElementById('edit-dairy').value;
-                } else {
-                    asiakkaat[currentIndex].dairy = "-";
-                }
+                a.dairy = (a.group === "Tilasäiliö") ? document.getElementById('edit-dairy').value : "-";
+                a.shopKetju = (a.group === "Kauppa") ? document.getElementById('edit-shop-ketju').value : "-";
 
                 const isMonitoring = document.getElementById('edit-monitoring').checked;
-                asiakkaat[currentIndex].monitoring = isMonitoring;
-                
-                if (isMonitoring) {
-                    asiakkaat[currentIndex].monitoringDate = document.getElementById('edit-monitoring-date').value || "-";
-                } else {
-                    asiakkaat[currentIndex].monitoringDate = "-";
-                }
+                a.monitoring = isMonitoring;
+                a.monitoringDate = isMonitoring ? (document.getElementById('edit-monitoring-date').value || "-") : "-";
 
                 const uusiPvm = document.getElementById('edit-service-date').value;
                 if (uusiPvm) {
-                    asiakkaat[currentIndex].lastService = uusiPvm;
-                    asiakkaat[currentIndex].isServiced = true;
+                    a.lastService = uusiPvm;
+                    a.isServiced = true;
                 } else {
-                    asiakkaat[currentIndex].lastService = "-";
-                    asiakkaat[currentIndex].isServiced = false;
+                    a.lastService = "-";
+                    a.isServiced = false;
                 }
+                
                 hasUnsavedChanges = true;
                 updateStorage();
                 alert("Tiedot tallennettu!");
@@ -672,49 +743,21 @@
             const file = e.target.files[0];
             const reader = new FileReader();
             reader.onload = async function(evt) {
-                const data = evt.target.result;
-                const workbook = XLSX.read(data, { type: 'binary' });
+                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
                 const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                const status = document.getElementById('status-text');
-                status.innerText = "Käsitellään...";
+                document.getElementById('status-text').innerText = "Käsitellään...";
                 
                 for (let r of rows) {
                     let lat = r.Lat || r.lat;
                     let lon = r.Lon || r.lon;
                     let osoite = r.Osoite || r.osoite || "";
-                    let raakaHuolto = r["Viimeisin huolto"] || r.huolto || "-";
-                    let raakaMonitor = r["Käytönvalvonta tehty"] || "-";
-                    let huolto = "-";
-                    let monitorPvm = "-";
-                    let ryhma = r.Ryhmä || r.ryhma || "muut";
-                    let nimi = r.Nimi || r.nimi || "Nimetön";
-                    let meijeri = r.Meijeri || r.meijeri || "-";
                     
-                    let kaytonvalvonta = false;
-                    const kvArvo = r["Käytönvalvonta"] || r.kaytonvalvonta;
-                    if (kvArvo && (kvArvo.toString().toLowerCase() === "kyllä" || kvArvo === true)) {
-                        kaytonvalvonta = true;
-                    }
-
                     const parseExcelDate = (val) => {
                         if (!val || val === "-") return "-";
-                        let d;
-                        if (typeof val === 'number') {
-                            d = new Date((val - 25569) * 86400 * 1000);
-                        } else {
-                            const osat = String(val).trim().split('.');
-                            if (osat.length === 3) {
-                                d = new Date(osat[2], osat[1] - 1, osat[0]);
-                            } else {
-                                d = new Date(val);
-                            }
-                        }
+                        let d = typeof val === 'number' ? new Date((val - 25569) * 86400 * 1000) : new Date(val);
                         return (!isNaN(d.getTime()) && d.getFullYear() > 1970) ? d.toISOString().split('T')[0] : "-";
                     };
 
-                    huolto = parseExcelDate(raakaHuolto);
-                    monitorPvm = parseExcelDate(raakaMonitor);
-                    
                     if (!lat || !lon) {
                         if (osoite) {
                             try {
@@ -731,22 +774,22 @@
 
                     if (lat && lon) {
                         const uudetTiedot = {
-                            name: nimi,
+                            name: r.Nimi || r.nimi || "Nimetön",
                             address: osoite || "-",
-                            lastService: huolto,
-                            monitoringDate: monitorPvm,
+                            lastService: parseExcelDate(r["Viimeisin huolto"] || r.huolto),
+                            monitoringDate: parseExcelDate(r["Käytönvalvonta tehty"]),
                             notes: r.Muistiinpanot || r.muistiinpanot || "",
                             interval: r["Huoltoväli (kk)"] || r.interval || "12",
-                            group: ryhma,
-                            dairy: meijeri,
+                            group: r.Ryhmä || r.ryhma || "muut",
+                            dairy: r.Meijeri || "-",
+                            shopKetju: r.Ketju || "-",
                             lat: parseFloat(lat),
                             lon: parseFloat(lon),
-                            isServiced: (huolto !== "-"),
-                            monitoring: kaytonvalvonta
+                            isServiced: r["Huollettu"] === "Kyllä",
+                            monitoring: r["Käytönvalvonta"] === "Kyllä"
                         };
 
-                        const olemassaOlevaIndeksi = asiakkaat.findIndex(a => a.name.toLowerCase() === nimi.toLowerCase());
-
+                        const olemassaOlevaIndeksi = asiakkaat.findIndex(a => a.name.toLowerCase() === uudetTiedot.name.toLowerCase());
                         if (olemassaOlevaIndeksi !== -1) {
                             asiakkaat[olemassaOlevaIndeksi] = uudetTiedot;
                         } else {
@@ -754,7 +797,7 @@
                         }
                     }
                 }
-                status.innerText = "Valmis!";
+                document.getElementById('status-text').innerText = "Valmis!";
                 hasUnsavedChanges = false;
                 updateStorage();
             };
@@ -770,19 +813,20 @@
                 document.getElementById('btn-edit-address').innerText = "📍 KLIKKAA UUTTA KOHTAA KARTALTA";
             } else {
                 const uusiOsoite = prompt("Anna uusi osoite:", asiakkaat[currentIndex].address);
-                if (!uusiOsoite) return;
-                try {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(uusiOsoite)}`);
-                    const data = await res.json();
-                    if (data && data[0]) {
-                        asiakkaat[currentIndex].address = data[0].display_name;
-                        asiakkaat[currentIndex].lat = parseFloat(data[0].lat);
-                        asiakkaat[currentIndex].lon = parseFloat(data[0].lon);
-                        hasUnsavedChanges = true;
-                        updateStorage();
-                        openPanel(currentIndex);
-                    }
-                } catch (e) { alert("Haku epäonnistui."); }
+                if (uusiOsoite) {
+                    try {
+                        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(uusiOsoite)}`);
+                        const data = await res.json();
+                        if (data && data[0]) {
+                            asiakkaat[currentIndex].address = data[0].display_name;
+                            asiakkaat[currentIndex].lat = parseFloat(data[0].lat);
+                            asiakkaat[currentIndex].lon = parseFloat(data[0].lon);
+                            hasUnsavedChanges = true;
+                            updateStorage();
+                            openPanel(currentIndex);
+                        }
+                    } catch (e) { alert("Haku epäonnistui."); }
+                }
             }
         }
 
@@ -798,7 +842,7 @@
                 if (data && data[0]) {
                     const lat = parseFloat(data[0].lat);
                     const lon = parseFloat(data[0].lon);
-                    openGroupModal({ name: nimi, address: data[0].display_name, lastService: "-", monitoringDate: "-", notes: "", interval: "12", group: "muut", dairy: "-", monitoring: false, lat: lat, lon: lon, isServiced: false });
+                    openGroupModal({ name: nimi, address: data[0].display_name, lastService: "-", monitoringDate: "-", notes: "", interval: "12", group: "muut", dairy: "-", shopKetju: "-", monitoring: false, lat: lat, lon: lon, isServiced: false });
                 }
             } catch (e) { alert("Virhe."); }
         }
@@ -841,6 +885,7 @@
                 "Osoite": a.address, 
                 "Ryhmä": a.group,
                 "Meijeri": a.dairy || "-",
+                "Ketju": a.shopKetju || "-",
                 "Viimeisin huolto": a.lastService, 
                 "Käytönvalvonta tehty": a.monitoringDate || "-",
                 "Huoltoväli (kk)": a.interval, 
@@ -892,16 +937,14 @@
                 return;
             }
 
-            let osoite = "Haetaan...";
             try {
                 const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
                 const data = await res.json();
-                osoite = data.display_name || "Tuntematon";
-            } catch (err) { osoite = "Virhe"; }
-            const nimi = prompt(`Lisää uusi asiakas sijaintiin:\n${osoite}\n\nNimi:`);
-            if (nimi) {
-                openGroupModal({ name: nimi, address: osoite, lastService: "-", monitoringDate: "-", notes: "", interval: "12", group: "muut", dairy: "-", monitoring: false, lat: lat, lon: lon, isServiced: false });
-            }
+                const nimi = prompt(`Lisää uusi asiakas:\n${data.display_name}\n\nNimi:`);
+                if (nimi) {
+                    openGroupModal({ name: nimi, address: data.display_name, lastService: "-", monitoringDate: "-", notes: "", interval: "12", group: "muut", dairy: "-", shopKetju: "-", monitoring: false, lat: lat, lon: lon, isServiced: false });
+                }
+            } catch (err) {}
         });
     </script>
 </body>
