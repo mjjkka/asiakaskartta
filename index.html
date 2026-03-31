@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Asiakaskartta Pro - v.3.48</title>
+    <title>Asiakaskartta Pro - v.3.51</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -234,7 +234,7 @@
             <button onclick="exportToExcel()" class="btn btn-export" id="btn-export">📤 VARMUUSKOPIOINTI</button>
             <hr id="settings-hr" style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
             <button onclick="clearAllData()" class="btn btn-clear" id="btn-clear">⚠️ Tyhjennä koko kartta</button>
-            <div class="version-text">v.3.48</div>
+            <div class="version-text">v.3.51</div>
         </div>
     </div>
 
@@ -368,6 +368,11 @@
 
         async function syncToCloud() {
             if (!GOOGLE_BACKUP_URL) return;
+            // MUUTOS: Estetään tyhjän listan synkronointi pilveen (varmuuskopion suojaus)
+            if (asiakkaat.length === 0) {
+                console.warn("Tyhjää listaa ei synkronoida pilveen.");
+                return;
+            }
             document.getElementById('unsaved-alert').style.display = 'block';
             try {
                 await fetch(GOOGLE_BACKUP_URL, {
@@ -931,9 +936,9 @@
                 if(confirm("❗ Oletko TÄYSIN varma? Tätä toimintoa ei voi peruuttaa.")) {
                     asiakkaat = [];
                     updateStorage();
-                    syncToCloud(); // Tyhjennä myös pilvi
+                    // syncToCloudia EI kutsuta tässä, jotta tyhjä lista ei pyyhi pilveä
                     toggleSettings();
-                    alert("Kartta tyhjennetty.");
+                    alert("Kartta tyhjennetty paikallisesti. Pilveä ei muutettu.");
                 }
             }
         }
