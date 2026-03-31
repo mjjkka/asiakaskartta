@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Asiakaskartta Pro - v3.44</title>
+    <title>Asiakaskartta Pro - v.3.48</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -222,20 +222,19 @@
         </div>
 
         <div id="unsaved-alert">
-            ⚠️ Tallentamattomia muutoksia!<br>
-            <a onclick="exportToExcel()">Lataa varmuuskopio nyt</a>
+            ⚠️ Tallennetaan pilveen...
         </div>
 
         <button onclick="toggleSettings()" class="btn btn-settings">⚙️ Asetukset & Työkalut</button>
         <div id="settings-menu">
             <button onclick="addNewManual()" class="btn btn-add-manual">➕ LISÄÄ ASIAKAS KÄSIN</button>
             <label for="excel-upload" class="btn btn-import" id="btn-import-label">📥 LATAA ASIAKKAAT</label>
-            <input type="file" id="excel-upload" accept=".xlsx, .xls" />
+            <input type="file" id="excel-upload" accept=".xlsx, .xls, .json" />
             <div id="status-text">Valmiina</div>
             <button onclick="exportToExcel()" class="btn btn-export" id="btn-export">📤 VARMUUSKOPIOINTI</button>
             <hr id="settings-hr" style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
             <button onclick="clearAllData()" class="btn btn-clear" id="btn-clear">⚠️ Tyhjennä koko kartta</button>
-            <div class="version-text">v.3.44</div>
+            <div class="version-text">v.3.48</div>
         </div>
     </div>
 
@@ -325,8 +324,11 @@
     <div id="map"></div>
 
     <script>
+        // *** GOOGLE BACKUP OSOITE ***
+        const GOOGLE_BACKUP_URL = "https://script.google.com/macros/s/AKfycbxW1RzeaaGzNfPUDbJUd3dBY79A-MWZOSu8nkt7m5nV9aho3-0rHWEdRzK7SqcrErhF/exec"; 
+
         // --- KIRJAUTUMISLOGIIKKA ---
-        function checkLogin() {
+        async function checkLogin() {
             const user = document.getElementById('login-user').value;
             const pass = document.getElementById('login-pass').value;
             
@@ -339,12 +341,50 @@
                 document.getElementById('login-overlay').style.display = 'none';
                 
                 applyUserPermissions();
+                await syncFromCloud(); // Lataa tiedot heti kirjautuessa
                 checkBackupReminder();
+                startAutoSync(); // Käynnistä automaattinen päivitys
                 handleGroupFilterChange(); 
                 renderMarkers();
             } else {
                 document.getElementById('login-error').style.display = 'block';
             }
+        }
+
+        // --- PILVI-LOGIIKKA (v.3.48 Lisäykset) ---
+        async function syncFromCloud() {
+            if (!GOOGLE_BACKUP_URL) return;
+            try {
+                const response = await fetch(GOOGLE_BACKUP_URL);
+                const cloudData = await response.json();
+                if (cloudData && Array.isArray(cloudData)) {
+                    asiakkaat = cloudData;
+                    localStorage.setItem('mapClients', JSON.stringify(asiakkaat));
+                    renderMarkers();
+                    console.log("Tiedot synkronoitu pilvestä.");
+                }
+            } catch (e) { console.error("Sync haku epäonnistui"); }
+        }
+
+        async function syncToCloud() {
+            if (!GOOGLE_BACKUP_URL) return;
+            document.getElementById('unsaved-alert').style.display = 'block';
+            try {
+                await fetch(GOOGLE_BACKUP_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify(asiakkaat)
+                });
+                console.log("Tiedot tallennettu pilveen.");
+            } catch (e) { console.error("Sync tallennus epäonnistui"); }
+            setTimeout(() => { document.getElementById('unsaved-alert').style.display = 'none'; }, 2000);
+        }
+
+        function startAutoSync() {
+            // Tarkistetaan uudet tiedot muilta käyttäjiltä 5 minuutin välein
+            setInterval(async () => {
+                await syncFromCloud();
+            }, 300000); 
         }
 
         function applyUserPermissions() {
@@ -388,7 +428,7 @@
         }
 
         // --- KARTTALOGIIKKA ---
-        const FINLAND_CENTER = [63.37, 23.47]; // Evijärvi
+        const FINLAND_CENTER = [63.37, 23.47]; 
         const FINLAND_ZOOM = 7; 
         const CUSTOMER_ZOOM = 11;
 
@@ -413,9 +453,12 @@
         if (sessionStorage.getItem('loggedIn') === 'true') {
             document.getElementById('login-overlay').style.display = 'none';
             applyUserPermissions();
-            checkBackupReminder();
-            handleGroupFilterChange();
-            renderMarkers();
+            syncFromCloud().then(() => {
+                checkBackupReminder();
+                startAutoSync();
+                handleGroupFilterChange();
+                renderMarkers();
+            });
         }
 
         function checkBackupReminder() {
@@ -615,10 +658,6 @@
             document.getElementById('count-red').innerText = stats.red;
             document.getElementById('count-blue').innerText = stats.blue;
             document.getElementById('count-total').innerText = total;
-
-            if (currentUser === "sft") {
-                document.getElementById('unsaved-alert').style.display = hasUnsavedChanges ? 'block' : 'none';
-            }
         }
 
         function openPanel(index) {
@@ -663,8 +702,8 @@
             if (uusiNimi && uusiNimi.trim() !== "") {
                 asiakkaat[currentIndex].name = uusiNimi.trim();
                 document.getElementById('disp-name').innerText = asiakkaat[currentIndex].name;
-                hasUnsavedChanges = true;
                 updateStorage();
+                syncToCloud(); // Lähetä muutos pilveen
             }
         }
 
@@ -673,9 +712,9 @@
                 const tänään = new Date().toISOString().split('T')[0];
                 asiakkaat[currentIndex].isServiced = true;
                 asiakkaat[currentIndex].lastService = tänään;
-                hasUnsavedChanges = true;
                 updateStorage();
                 openPanel(currentIndex);
+                syncToCloud(); // Lähetä muutos pilveen
             }
         }
 
@@ -702,10 +741,10 @@
                     a.isServiced = false;
                 }
                 
-                hasUnsavedChanges = true;
                 updateStorage();
-                alert("Tiedot tallennettu!");
+                alert("Tiedot tallennettu pilveen!");
                 closePanel();
+                syncToCloud(); // Lähetä muutos pilveen
             }
         }
 
@@ -731,9 +770,9 @@
                 pendingNewCustomer.group = group;
                 if (group === "Käytönvalvonta") pendingNewCustomer.monitoring = true;
                 asiakkaat.push(pendingNewCustomer);
-                hasUnsavedChanges = true;
                 updateStorage();
                 openPanel(asiakkaat.length - 1);
+                syncToCloud(); // Lähetä uusi asiakas pilveen
             }
             document.getElementById('group-modal').style.display = 'none';
             pendingNewCustomer = null;
@@ -741,9 +780,35 @@
 
         document.getElementById('excel-upload').addEventListener('change', function(e) {
             const file = e.target.files[0];
+            if (!file) return;
+
             const reader = new FileReader();
+
+            // Tuki JSON-tiedostoille
+            if (file.name.endsWith('.json')) {
+                reader.onload = function(evt) {
+                    try {
+                        const importedData = JSON.parse(evt.target.result);
+                        if (Array.isArray(importedData)) {
+                            asiakkaat = importedData;
+                            document.getElementById('status-text').innerText = "JSON ladattu!";
+                            updateStorage();
+                            syncToCloud(); // Lähetä tuotu data pilveen
+                        } else {
+                            alert("Virheellinen JSON-muoto.");
+                        }
+                    } catch (err) {
+                        alert("JSON-tiedoston luku epäonnistui.");
+                    }
+                };
+                reader.readAsText(file);
+                return;
+            }
+
+            // Tuki Excel-tiedostoille
             reader.onload = async function(evt) {
-                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+                const data = evt.target.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
                 const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                 document.getElementById('status-text').innerText = "Käsitellään...";
                 
@@ -797,9 +862,9 @@
                         }
                     }
                 }
-                document.getElementById('status-text').innerText = "Valmis!";
-                hasUnsavedChanges = false;
+                document.getElementById('status-text').innerText = "Excel ladattu!";
                 updateStorage();
+                syncToCloud(); // Lähetä tuotu data pilveen
             };
             reader.readAsBinaryString(file);
         });
@@ -821,9 +886,9 @@
                             asiakkaat[currentIndex].address = data[0].display_name;
                             asiakkaat[currentIndex].lat = parseFloat(data[0].lat);
                             asiakkaat[currentIndex].lon = parseFloat(data[0].lon);
-                            hasUnsavedChanges = true;
                             updateStorage();
                             openPanel(currentIndex);
+                            syncToCloud(); // Lähetä muutos pilveen
                         }
                     } catch (e) { alert("Haku epäonnistui."); }
                 }
@@ -850,9 +915,9 @@
         function deleteSingleCustomer() {
             if (currentIndex !== null && confirm("Poistetaanko asiakas?")) {
                 asiakkaat.splice(currentIndex, 1);
-                hasUnsavedChanges = true;
                 updateStorage();
                 closePanel();
+                syncToCloud(); // Lähetä poisto pilveen
             }
         }
 
@@ -865,8 +930,8 @@
             if(confirm("⚠️ Oletko varma? Tämä poistaa KAIKKI asiakkaat kartalta lopullisesti.")) {
                 if(confirm("❗ Oletko TÄYSIN varma? Tätä toimintoa ei voi peruuttaa.")) {
                     asiakkaat = [];
-                    hasUnsavedChanges = true;
                     updateStorage();
+                    syncToCloud(); // Tyhjennä myös pilvi
                     toggleSettings();
                     alert("Kartta tyhjennetty.");
                 }
@@ -901,7 +966,6 @@
             XLSX.writeFile(workbook, "Asiakkaat_Varmuuskopio.xlsx");
             
             localStorage.setItem('lastBackupDate', new Date().toISOString().split('T')[0]);
-            hasUnsavedChanges = false;
             renderMarkers();
         }
 
@@ -929,10 +993,10 @@
                     asiakkaat[currentIndex].lon = lon;
                     asiakkaat[currentIndex].address = data.display_name || "Tuntematon";
                     isRelocating = false;
-                    hasUnsavedChanges = true;
                     document.getElementById('map').classList.remove('map-select-active');
                     updateStorage();
                     openPanel(currentIndex);
+                    syncToCloud(); // Lähetä sijainnin muutos pilveen
                 } catch (err) { alert("Osoitteen haku epäonnistui."); }
                 return;
             }
