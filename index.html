@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Asiakaskartta Pro - v.3.51</title>
+    <title>Asiakaskartta Pro - v.3.59</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -33,6 +33,20 @@
             width: 100%; padding: 12px; background: #007bff; color: white;
             border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
         }
+
+        /* Lataus-symboli */
+        #loading-spinner {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: none; align-items: center; justify-content: center;
+            flex-direction: column; z-index: 9998;
+        }
+        .spinner {
+            width: 50px; height: 50px; border: 5px solid #f3f3f3;
+            border-top: 5px solid #007bff; border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 10px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         .controls {
             position: absolute; top: 20px; left: 20px; z-index: 1000; 
@@ -72,6 +86,7 @@
         .btn-export { background: #007bff; color: white; }
         .btn-settings { background: #6c757d; color: white; font-size: 12px; padding: 8px; }
         .btn-clear { background: #dc3545; color: white; width: 100%; margin-top: 10px; }
+        .btn-logout { background: #343a40; color: white; margin-top: 5px; }
 
         #excel-upload { display: none; }
         #status-text { font-size: 12px; color: #666; font-style: italic; min-height: 15px; text-align: center; margin-bottom: 5px; }
@@ -91,26 +106,31 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.15); font-size: 12px;
             display: flex; flex-direction: column; gap: 4px; min-width: 160px;
         }
-        .stat-row { display: flex; justify-content: space-between; align-items: center; }
+        .stat-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .stat-row:hover { background: #f8f9fa; }
         .stat-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
-        .stat-total { border-top: 1px solid #eee; margin-top: 4px; padding-top: 4px; font-weight: bold; }
+        .stat-total { border-top: 1px solid #eee; margin-top: 4px; padding-top: 4px; font-weight: bold; cursor: default; }
+        .stat-total:hover { background: none; }
+        .refresh-icon { cursor: pointer; margin-left: 5px; font-size: 14px; transition: transform 0.3s; }
+        .refresh-icon:hover { transform: rotate(180deg); }
 
-        #info-panel {
+        #info-panel, #machine-card-panel {
             position: absolute; right: -450px; top: 0; width: 400px; height: 100vh;
             background: white; z-index: 1001; transition: 0.4s ease;
             box-shadow: -10px 0 20px rgba(0,0,0,0.1); padding: 30px; box-sizing: border-box;
             display: flex; flex-direction: column; overflow-y: auto;
         }
-        #info-panel.active { right: 0; }
+        #info-panel.active, #machine-card-panel.active { right: 0; }
         .close-btn { align-self: flex-end; font-size: 35px; cursor: pointer; color: #ccc; line-height: 20px; }
         .info-label { font-size: 12px; color: #888; text-transform: uppercase; font-weight: bold; margin-top: 15px; }
         .info-value { font-size: 16px; color: #333; margin-bottom: 5px; font-weight: 500; }
         
-        select, textarea, input[type="date"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-top: 5px; box-sizing: border-box; font-family: inherit; min-height: 45px; }
+        select, textarea, input[type="date"], .machine-input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; margin-top: 5px; box-sizing: border-box; font-family: inherit; min-height: 45px; }
         textarea { height: 80px; resize: none; }
         
         .save-btn { width: 100%; background: #007bff; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .service-btn { width: 100%; background: #28a745; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .machine-btn { width: 100%; background: #ffc107; color: #333; border: none; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 10px; display: none; }
         .edit-addr-btn { background: none; color: #007bff; border: 1px solid #007bff; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 11px; margin-top: 5px; font-weight: bold; width: fit-content; }
         .delete-btn { background: none; color: #dc3545; border: 1px solid #dc3545; padding: 10px; border-radius: 8px; margin-top: 15px; cursor: pointer; font-weight: bold; font-size: 13px; }
         
@@ -146,7 +166,7 @@
         #dairy-section, #shop-ketju-section { display: none; }
 
         @media screen and (max-width: 600px) {
-            #info-panel { width: 100%; right: -100%; }
+            #info-panel, #machine-card-panel { width: 100%; right: -100%; }
         }
     </style>
 </head>
@@ -160,6 +180,11 @@
             <button onclick="checkLogin()">Kirjaudu sisään</button>
             <p id="login-error" style="color:red; font-size:12px; margin-top:10px; display:none;">Virheelliset tunnukset!</p>
         </div>
+    </div>
+
+    <div id="loading-spinner">
+        <div class="spinner"></div>
+        <div style="font-weight: bold; color: #007bff;">Ladataan tietoja pilvestä...</div>
     </div>
 
     <div id="group-modal">
@@ -234,16 +259,17 @@
             <button onclick="exportToExcel()" class="btn btn-export" id="btn-export">📤 VARMUUSKOPIOINTI</button>
             <hr id="settings-hr" style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
             <button onclick="clearAllData()" class="btn btn-clear" id="btn-clear">⚠️ Tyhjennä koko kartta</button>
-            <div class="version-text">v.3.51</div>
+            <button onclick="logout()" class="btn btn-logout">🚪 KIRJAUDU ULOS</button>
+            <div class="version-text">v.3.59</div>
         </div>
     </div>
 
     <div id="stat-counter">
         <div class="stat-row"><span><span class="stat-dot" style="background: #28a745;"></span>Huollettu:</span><strong id="count-green">0</strong></div>
-        <div class="stat-row"><span><span class="stat-dot" style="background: #ffc107;"></span>Huolto ajankohtainen:</span><strong id="count-yellow">0</strong></div>
-        <div class="stat-row"><span><span class="stat-dot" style="background: #dc3545;"></span>Huolto myöhässä:</span><strong id="count-red">0</strong></div>
+        <div class="stat-row" onclick="filterByColor('yellow')"><span><span class="stat-dot" style="background: #ffc107;"></span>Huolto ajankohtainen:</span><strong id="count-yellow">0</strong></div>
+        <div class="stat-row" onclick="filterByColor('red')"><span><span class="stat-dot" style="background: #dc3545;"></span>Huolto myöhässä:</span><strong id="count-red">0</strong></div>
         <div class="stat-row"><span><span class="stat-dot" style="background: #007bff;"></span>Ei huolto merkintää:</span><strong id="count-blue">0</strong></div>
-        <div class="stat-row stat-total"><span>Yhteensä:</span><strong id="count-total">0</strong></div>
+        <div class="stat-row stat-total"><span>Yhteensä:<span class="refresh-icon" onclick="filterByColor(null)" title="Palauta kaikki">🔄</span></span><strong id="count-total">0</strong></div>
     </div>
 
     <div id="info-panel">
@@ -257,6 +283,8 @@
         <div id="disp-address" class="info-value">-</div>
         <button class="edit-addr-btn" id="btn-edit-address" onclick="updateCustomerAddress()">✏️ Muokkaa osoitetta</button>
         
+        <button id="btn-machine-card" class="machine-btn" onclick="openMachineCard()">📋 AVAA KONEKORTTI</button>
+
         <div class="checkbox-container" id="kv-checkbox-container">
             <input type="checkbox" id="edit-monitoring" onchange="toggleMonitoringSection()">
             <label for="edit-monitoring">Käytönvalvonta</label>
@@ -321,6 +349,39 @@
         <button class="delete-btn" onclick="deleteSingleCustomer()">❌ Poista asiakas</button>
     </div>
 
+    <div id="machine-card-panel">
+        <div class="close-btn" onclick="closeMachineCard()">&times;</div>
+        <h2 style="color: #ffc107; margin-top: 0;">📋 Konekortti</h2>
+        <div id="mc-cust-name" style="font-weight: bold; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;">-</div>
+        
+        <div class="info-label">Merkki</div><input type="text" class="machine-input" id="mc-merkki">
+        <div class="info-label">Malli</div><input type="text" class="machine-input" id="mc-malli">
+        <div class="info-label">Asennusvuosi</div><input type="text" class="machine-input" id="mc-vuosi">
+        <div class="info-label">Pesuri</div><input type="text" class="machine-input" id="mc-pesuri">
+        <div class="info-label">Kompressori</div><input type="text" class="machine-input" id="mc-kompressori">
+        <div class="info-label">Kylmäaine</div><input type="text" class="machine-input" id="mc-kylmaaine">
+        <div class="info-label">Kylmäaine määrä</div><input type="text" class="machine-input" id="mc-maara">
+        <div class="info-label">Sekoitinmoottori</div><input type="text" class="machine-input" id="mc-sekoitin">
+        <div class="info-label">Pesurin pumppu</div><input type="text" class="machine-input" id="mc-pesupumppu">
+        <div class="info-label">Tyhjennysventtiili</div><input type="text" class="machine-input" id="mc-tyhjennys">
+        <div class="info-label">Pesuainepumppu</div><input type="text" class="machine-input" id="mc-aine">
+        <div class="info-label">Vesiventtiili</div><input type="text" class="machine-input" id="mc-vesiv">
+        <div class="info-label">Lämpötila-anturi(t)</div><input type="text" class="machine-input" id="mc-anturi">
+        <div class="info-label">Lauhdutinpuhallin</div><input type="text" class="machine-input" id="mc-lauhdpuhallin">
+        <div class="info-label">Lauhdutin puhallin ohjaus</div><input type="text" class="machine-input" id="mc-lauhdohjaus">
+        <div class="info-label">Magneettiventtiili</div><input type="text" class="machine-input" id="mc-magneettiv">
+        <div class="info-label">Kuivain</div><input type="text" class="machine-input" id="mc-kuivain">
+        <div class="info-label">Alijäähdytys venttiili</div><input type="text" class="machine-input" id="mc-alijaahdv">
+        <div class="info-label">Paisuntaventtiili ja suutin</div><input type="text" class="machine-input" id="mc-paisuntav">
+        <div class="info-label">Öljy</div><input type="text" class="machine-input" id="mc-oljy">
+        <div class="info-label">Esijäähdytys</div><input type="text" class="machine-input" id="mc-esijaahd">
+        <div class="info-label">LTO</div><input type="text" class="machine-input" id="mc-lto">
+        <div class="info-label">Koneikkosäädin</div><input type="text" class="machine-input" id="mc-saadin">
+        <div class="info-label">Lisätieto</div><textarea class="machine-input" id="mc-lisatieto"></textarea>
+
+        <button class="save-btn" style="background: #28a745;" onclick="saveChanges()">TALLENNA JA SULJE</button>
+    </div>
+
     <div id="map"></div>
 
     <script>
@@ -340,10 +401,16 @@
                 sessionStorage.setItem('currentUser', user);
                 document.getElementById('login-overlay').style.display = 'none';
                 
+                // Näytetään latausruutu
+                document.getElementById('loading-spinner').style.display = 'flex';
+                
                 applyUserPermissions();
-                await syncFromCloud(); // Lataa tiedot heti kirjautuessa
-                checkBackupReminder();
-                startAutoSync(); // Käynnistä automaattinen päivitys
+                await syncFromCloud(); // Tässä haetaan tiedot pilvestä
+                
+                // Piilotetaan latausruutu haun jälkeen
+                document.getElementById('loading-spinner').style.display = 'none';
+                
+                startAutoSync(); 
                 handleGroupFilterChange(); 
                 renderMarkers();
             } else {
@@ -351,7 +418,12 @@
             }
         }
 
-        // --- PILVI-LOGIIKKA (v.3.48 Lisäykset) ---
+        function logout() {
+            sessionStorage.clear();
+            location.reload();
+        }
+
+        // --- PILVI-LOGIIKKA ---
         async function syncFromCloud() {
             if (!GOOGLE_BACKUP_URL) return;
             try {
@@ -361,16 +433,14 @@
                     asiakkaat = cloudData;
                     localStorage.setItem('mapClients', JSON.stringify(asiakkaat));
                     renderMarkers();
-                    console.log("Tiedot synkronoitu pilvestä.");
                 }
             } catch (e) { console.error("Sync haku epäonnistui"); }
         }
 
         async function syncToCloud() {
             if (!GOOGLE_BACKUP_URL) return;
-            // MUUTOS: Estetään tyhjän listan synkronointi pilveen (varmuuskopion suojaus)
             if (asiakkaat.length === 0) {
-                console.warn("Tyhjää listaa ei synkronoida pilveen.");
+                console.warn("Synkronointi estetty: lista on tyhjä.");
                 return;
             }
             document.getElementById('unsaved-alert').style.display = 'block';
@@ -386,7 +456,6 @@
         }
 
         function startAutoSync() {
-            // Tarkistetaan uudet tiedot muilta käyttäjiltä 5 minuutin välein
             setInterval(async () => {
                 await syncFromCloud();
             }, 300000); 
@@ -433,7 +502,7 @@
         }
 
         // --- KARTTALOGIIKKA ---
-        const FINLAND_CENTER = [63.37, 23.47]; 
+        const FINLAND_CENTER = [63.68, 25.98]; 
         const FINLAND_ZOOM = 7; 
         const CUSTOMER_ZOOM = 11;
 
@@ -447,6 +516,7 @@
         let isRelocating = false;
         let pendingNewCustomer = null;
         let hasUnsavedChanges = false;
+        let activeColorFilter = null;
 
         const icons = {
             blue: new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] }),
@@ -458,26 +528,14 @@
         if (sessionStorage.getItem('loggedIn') === 'true') {
             document.getElementById('login-overlay').style.display = 'none';
             applyUserPermissions();
+            // Näytetään spinneri automaattikirjautumisessakin haun ajaksi
+            document.getElementById('loading-spinner').style.display = 'flex';
             syncFromCloud().then(() => {
-                checkBackupReminder();
+                document.getElementById('loading-spinner').style.display = 'none';
                 startAutoSync();
                 handleGroupFilterChange();
                 renderMarkers();
             });
-        }
-
-        function checkBackupReminder() {
-            const user = sessionStorage.getItem('currentUser');
-            if (user === "Antero" || user === "Maitosuomi") return;
-            const now = new Date();
-            const todayStr = now.toISOString().split('T')[0];
-            const lastBackup = localStorage.getItem('lastBackupDate');
-            
-            if (now.getHours() >= 7 && lastBackup !== todayStr) {
-                setTimeout(() => {
-                    alert("⚠️ HUOMIO: Päivän varmuuskopiota ei ole vielä ladattu. Muistathan ladata Excel-tiedoston!");
-                }, 1000);
-            }
         }
 
         function toggleMonitoringSection() {
@@ -489,9 +547,11 @@
             const group = document.getElementById('edit-group').value;
             document.getElementById('dairy-section').style.display = (group === "Tilasäiliö") ? 'block' : 'none';
             document.getElementById('shop-ketju-section').style.display = (group === "Kauppa") ? 'block' : 'none';
+            document.getElementById('btn-machine-card').style.display = (group === "Tilasäiliö") ? 'block' : 'none';
         }
 
         function handleGroupFilterChange() {
+            activeColorFilter = null;
             const group = document.getElementById('group-filter').value;
             document.getElementById('dairy-filter-container').style.display = (group === "Tilasäiliö") ? 'block' : 'none';
             document.getElementById('shop-filter-container').style.display = (group === "Kauppa") ? 'block' : 'none';
@@ -499,6 +559,11 @@
             if (group !== "Tilasäiliö") document.getElementById('dairy-filter').value = "Kaikki";
             if (group !== "Kauppa") document.getElementById('shop-filter').value = "Kaikki";
             
+            renderMarkers();
+        }
+
+        function filterByColor(color) {
+            activeColorFilter = color;
             renderMarkers();
         }
 
@@ -629,10 +694,12 @@
                 
                 if (currentFilter === "Kaikki" || isNormalGroup || isMonitoringSearch) {
                     const colorKey = getMarkerColor(a);
-                    const m = L.marker([a.lat, a.lon], { icon: icons[colorKey] }).addTo(map);
-                    
                     stats[colorKey]++;
 
+                    if (activeColorFilter && colorKey !== activeColorFilter) return;
+
+                    const m = L.marker([a.lat, a.lon], { icon: icons[colorKey] }).addTo(map);
+                    
                     m.bindTooltip(a.name, { 
                         direction: 'top', 
                         offset: [0, -35]
@@ -701,6 +768,25 @@
             document.getElementById('info-panel').classList.add('active');
         }
 
+        // --- KONEKORTTI TOIMINNOT ---
+        function openMachineCard() {
+            if (currentIndex === null) return;
+            const a = asiakkaat[currentIndex];
+            document.getElementById('mc-cust-name').innerText = a.name;
+            
+            // Täytetään kentät
+            const fields = ["merkki", "malli", "vuosi", "pesuri", "kompressori", "kylmaaine", "maara", "sekoitin", "pesupumppu", "tyhjennys", "aine", "vesiv", "anturi", "lauhdpuhallin", "lauhdohjaus", "magneettiv", "kuivain", "alijaahdv", "paisuntav", "oljy", "esijaahd", "lto", "saadin", "lisatieto"];
+            fields.forEach(f => {
+                document.getElementById('mc-' + f).value = a.machineCard ? (a.machineCard[f] || "") : "";
+            });
+            
+            document.getElementById('machine-card-panel').classList.add('active');
+        }
+
+        function closeMachineCard() {
+            document.getElementById('machine-card-panel').classList.remove('active');
+        }
+
         function renameCustomer() {
             if (currentIndex === null) return;
             const uusiNimi = prompt("Anna uusi nimi asiakkaalle:", asiakkaat[currentIndex].name);
@@ -708,7 +794,7 @@
                 asiakkaat[currentIndex].name = uusiNimi.trim();
                 document.getElementById('disp-name').innerText = asiakkaat[currentIndex].name;
                 updateStorage();
-                syncToCloud(); // Lähetä muutos pilveen
+                syncToCloud(); 
             }
         }
 
@@ -719,7 +805,7 @@
                 asiakkaat[currentIndex].lastService = tänään;
                 updateStorage();
                 openPanel(currentIndex);
-                syncToCloud(); // Lähetä muutos pilveen
+                syncToCloud(); 
             }
         }
 
@@ -745,11 +831,21 @@
                     a.lastService = "-";
                     a.isServiced = false;
                 }
+
+                // KONEKORTTI TALLENNUS
+                if (document.getElementById('machine-card-panel').classList.contains('active')) {
+                    a.machineCard = {};
+                    const fields = ["merkki", "malli", "vuosi", "pesuri", "kompressori", "kylmaaine", "maara", "sekoitin", "pesupumppu", "tyhjennys", "aine", "vesiv", "anturi", "lauhdpuhallin", "lauhdohjaus", "magneettiv", "kuivain", "alijaahdv", "paisuntav", "oljy", "esijaahd", "lto", "saadin", "lisatieto"];
+                    fields.forEach(f => {
+                        a.machineCard[f] = document.getElementById('mc-' + f).value;
+                    });
+                }
                 
                 updateStorage();
-                alert("Tiedot tallennettu pilveen!");
+                alert("Tiedot tallennettu!");
                 closePanel();
-                syncToCloud(); // Lähetä muutos pilveen
+                closeMachineCard();
+                syncToCloud(); 
             }
         }
 
@@ -777,7 +873,7 @@
                 asiakkaat.push(pendingNewCustomer);
                 updateStorage();
                 openPanel(asiakkaat.length - 1);
-                syncToCloud(); // Lähetä uusi asiakas pilveen
+                syncToCloud(); 
             }
             document.getElementById('group-modal').style.display = 'none';
             pendingNewCustomer = null;
@@ -798,7 +894,7 @@
                             asiakkaat = importedData;
                             document.getElementById('status-text').innerText = "JSON ladattu!";
                             updateStorage();
-                            syncToCloud(); // Lähetä tuotu data pilveen
+                            syncToCloud();
                         } else {
                             alert("Virheellinen JSON-muoto.");
                         }
@@ -869,7 +965,7 @@
                 }
                 document.getElementById('status-text').innerText = "Excel ladattu!";
                 updateStorage();
-                syncToCloud(); // Lähetä tuotu data pilveen
+                syncToCloud(); 
             };
             reader.readAsBinaryString(file);
         });
@@ -893,7 +989,7 @@
                             asiakkaat[currentIndex].lon = parseFloat(data[0].lon);
                             updateStorage();
                             openPanel(currentIndex);
-                            syncToCloud(); // Lähetä muutos pilveen
+                            syncToCloud(); 
                         }
                     } catch (e) { alert("Haku epäonnistui."); }
                 }
@@ -922,7 +1018,8 @@
                 asiakkaat.splice(currentIndex, 1);
                 updateStorage();
                 closePanel();
-                syncToCloud(); // Lähetä poisto pilveen
+                closeMachineCard();
+                syncToCloud(); 
             }
         }
 
@@ -932,14 +1029,11 @@
         }
 
         function clearAllData() {
-            if(confirm("⚠️ Oletko varma? Tämä poistaa KAIKKI asiakkaat kartalta lopullisesti.")) {
-                if(confirm("❗ Oletko TÄYSIN varma? Tätä toimintoa ei voi peruuttaa.")) {
-                    asiakkaat = [];
-                    updateStorage();
-                    // syncToCloudia EI kutsuta tässä, jotta tyhjä lista ei pyyhi pilveä
-                    toggleSettings();
-                    alert("Kartta tyhjennetty paikallisesti. Pilveä ei muutettu.");
-                }
+            if(confirm("⚠️ Oletko varma? Tämä poistaa asiakkaat VAIN sinun näytöltäsi tässä istunnossa. Pilvi säilyy ennallaan.")) {
+                asiakkaat = [];
+                updateStorage();
+                toggleSettings();
+                alert("Kartta tyhjennetty paikallisesti.");
             }
         }
 
@@ -950,21 +1044,23 @@
 
         function exportToExcel() {
             if (asiakkaat.length === 0) return alert("Ei tietoja!");
-            const exportData = asiakkaat.map(a => ({
-                "Nimi": a.name, 
-                "Osoite": a.address, 
-                "Ryhmä": a.group,
-                "Meijeri": a.dairy || "-",
-                "Ketju": a.shopKetju || "-",
-                "Viimeisin huolto": a.lastService, 
-                "Käytönvalvonta tehty": a.monitoringDate || "-",
-                "Huoltoväli (kk)": a.interval, 
-                "Muistiinpanot": a.notes, 
-                "Lat": a.lat, 
-                "Lon": a.lon,
-                "Huollettu": a.isServiced ? "Kyllä" : "Ei",
-                "Käytönvalvonta": a.monitoring ? "Kyllä" : "Ei"
-            }));
+            const exportData = asiakkaat.map(a => {
+                const mc = a.machineCard || {};
+                return {
+                    "Nimi": a.name, "Osoite": a.address, "Ryhmä": a.group, "Meijeri": a.dairy || "-", "Ketju": a.shopKetju || "-",
+                    "Viimeisin huolto": a.lastService, "Käytönvalvonta tehty": a.monitoringDate || "-", "Huoltoväli (kk)": a.interval, 
+                    "Huollettu": a.isServiced ? "Kyllä" : "Ei", "Käytönvalvonta": a.monitoring ? "Kyllä" : "Ei",
+                    "Merkki": mc.merkki || "", "Malli": mc.malli || "", "Asennusvuosi": mc.vuosi || "", "Pesuri": mc.pesuri || "",
+                    "Kompressori": mc.kompressori || "", "Kylmäaine": mc.kylmaaine || "", "Kylmäaine määrä": mc.maara || "",
+                    "Sekoitinmoottori": mc.sekoitin || "", "Pesurin pumppu": mc.pesupumppu || "", "Tyhjennysventtiili": mc.tyhjennys || "",
+                    "Pesuainepumppu": mc.aine || "", "Vesiventtiili": mc.vesiv || "", "Lämpötila-anturi": mc.anturi || "",
+                    "Lauhdutinpuhallin": mc.lauhdpuhallin || "", "Lauhdutin puhallin ohjaus": mc.lauhdohjaus || "",
+                    "Magneettiventtiili": mc.magneettiv || "", "Kuivain": mc.kuivain || "", "Alijäähdytys venttiili": mc.alijaahdv || "",
+                    "Paisuntaventtiili": mc.paisuntav || "", "Öljy": mc.oljy || "", "Esijäähdytys": mc.esijaahd || "",
+                    "LTO": mc.lto || "", "Koneikkosäädin": mc.saadin || "", "Lisätieto": mc.lisatieto || "",
+                    "Lat": a.lat, "Lon": a.lon, "Muistiinpanot": a.notes
+                };
+            });
             const worksheet = XLSX.utils.json_to_sheet(exportData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Asiakkaat");
@@ -985,8 +1081,9 @@
                 return;
             }
 
-            if (document.getElementById('info-panel').classList.contains('active') && !isRelocating) {
+            if ((document.getElementById('info-panel').classList.contains('active') || document.getElementById('machine-card-panel').classList.contains('active')) && !isRelocating) {
                 closePanel();
+                closeMachineCard();
                 return;
             }
 
@@ -1001,7 +1098,7 @@
                     document.getElementById('map').classList.remove('map-select-active');
                     updateStorage();
                     openPanel(currentIndex);
-                    syncToCloud(); // Lähetä sijainnin muutos pilveen
+                    syncToCloud(); 
                 } catch (err) { alert("Osoitteen haku epäonnistui."); }
                 return;
             }
