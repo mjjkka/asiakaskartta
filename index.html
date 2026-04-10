@@ -165,6 +165,22 @@
         #monitoring-date-section { display: none; }
         #dairy-section, #shop-ketju-section { display: none; }
 
+        /* Uusi Nimi-nappi tyyli */
+        .name-toggle-btn {
+            background: white;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+            margin-bottom: 5px;
+            display: block;
+        }
+        .name-toggle-btn:hover { background: #f4f4f4; }
+        .name-toggle-btn.active { background: #007bff; color: white; border-color: #0056b3; }
+
         @media screen and (max-width: 600px) {
             #info-panel, #machine-card-panel { width: 100%; right: -100%; }
         }
@@ -510,6 +526,32 @@
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
+        // Nimi-napin luonti ja lisäys karttaan
+        let namesVisible = false;
+        const nameToggleControl = L.control({position: 'bottomright'});
+        nameToggleControl.onAdd = function (map) {
+            const btn = L.DomUtil.create('button', 'name-toggle-btn');
+            btn.innerHTML = '🏷️ Nimet';
+            btn.onclick = function(e) {
+                L.DomEvent.stopPropagation(e);
+                toggleAllNames();
+            };
+            return btn;
+        };
+        nameToggleControl.addTo(map);
+
+        function toggleAllNames() {
+            namesVisible = !namesVisible;
+            const btn = document.querySelector('.name-toggle-btn');
+            if (namesVisible) {
+                btn.classList.add('active');
+                markers.forEach(m => m.openTooltip());
+            } else {
+                btn.classList.remove('active');
+                markers.forEach(m => m.closeTooltip());
+            }
+        }
+
         let asiakkaat = JSON.parse(localStorage.getItem('mapClients')) || [];
         let markers = [];
         let currentIndex = null;
@@ -528,7 +570,6 @@
         if (sessionStorage.getItem('loggedIn') === 'true') {
             document.getElementById('login-overlay').style.display = 'none';
             applyUserPermissions();
-            // Näytetään spinneri automaattikirjautumisessakin haun ajaksi
             document.getElementById('loading-spinner').style.display = 'flex';
             syncFromCloud().then(() => {
                 document.getElementById('loading-spinner').style.display = 'none';
@@ -702,8 +743,14 @@
                     
                     m.bindTooltip(a.name, { 
                         direction: 'top', 
-                        offset: [0, -35]
+                        offset: [0, -35],
+                        permanent: false // Pidetään false, jotta openTooltip/closeTooltip toimii napista
                     });
+
+                    // Jos nimet ovat päällä renderöinnin aikana, avataan tooltip heti
+                    if (namesVisible) {
+                        m.openTooltip();
+                    }
 
                     m.on('click', (e) => {
                         if (isRelocating) return;
@@ -711,7 +758,7 @@
                         
                         if (!m.isTooltipOpen()) {
                             markers.forEach(otherM => {
-                                if (otherM !== m) otherM.closeTooltip();
+                                if (otherM !== m && !namesVisible) otherM.closeTooltip();
                             });
                             m.openTooltip();
                         } else {
@@ -773,13 +820,10 @@
             if (currentIndex === null) return;
             const a = asiakkaat[currentIndex];
             document.getElementById('mc-cust-name').innerText = a.name;
-            
-            // Täytetään kentät
             const fields = ["merkki", "malli", "vuosi", "pesuri", "kompressori", "kylmaaine", "maara", "sekoitin", "pesupumppu", "tyhjennys", "aine", "vesiv", "anturi", "lauhdpuhallin", "lauhdohjaus", "magneettiv", "kuivain", "alijaahdv", "paisuntav", "oljy", "esijaahd", "lto", "saadin", "lisatieto"];
             fields.forEach(f => {
                 document.getElementById('mc-' + f).value = a.machineCard ? (a.machineCard[f] || "") : "";
             });
-            
             document.getElementById('machine-card-panel').classList.add('active');
         }
 
@@ -815,14 +859,11 @@
                 a.notes = document.getElementById('edit-notes').value;
                 a.interval = document.getElementById('edit-interval').value;
                 a.group = document.getElementById('edit-group').value;
-                
                 a.dairy = (a.group === "Tilasäiliö") ? document.getElementById('edit-dairy').value : "-";
                 a.shopKetju = (a.group === "Kauppa") ? document.getElementById('edit-shop-ketju').value : "-";
-
                 const isMonitoring = document.getElementById('edit-monitoring').checked;
                 a.monitoring = isMonitoring;
                 a.monitoringDate = isMonitoring ? (document.getElementById('edit-monitoring-date').value || "-") : "-";
-
                 const uusiPvm = document.getElementById('edit-service-date').value;
                 if (uusiPvm) {
                     a.lastService = uusiPvm;
@@ -831,8 +872,6 @@
                     a.lastService = "-";
                     a.isServiced = false;
                 }
-
-                // KONEKORTTI TALLENNUS
                 if (document.getElementById('machine-card-panel').classList.contains('active')) {
                     a.machineCard = {};
                     const fields = ["merkki", "malli", "vuosi", "pesuri", "kompressori", "kylmaaine", "maara", "sekoitin", "pesupumppu", "tyhjennys", "aine", "vesiv", "anturi", "lauhdpuhallin", "lauhdohjaus", "magneettiv", "kuivain", "alijaahdv", "paisuntav", "oljy", "esijaahd", "lto", "saadin", "lisatieto"];
@@ -840,7 +879,6 @@
                         a.machineCard[f] = document.getElementById('mc-' + f).value;
                     });
                 }
-                
                 updateStorage();
                 alert("Tiedot tallennettu!");
                 closePanel();
@@ -856,7 +894,7 @@
             document.getElementById('map').classList.remove('map-select-active');
             document.getElementById('btn-edit-address').innerText = "✏️ Muokkaa osoitetta";
             
-            markers.forEach(m => m.closeTooltip());
+            if (!namesVisible) markers.forEach(m => m.closeTooltip());
             map.flyTo(FINLAND_CENTER, FINLAND_ZOOM);
         }
 
@@ -882,10 +920,7 @@
         document.getElementById('excel-upload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
-
-            // Tuki JSON-tiedostoille
             if (file.name.endsWith('.json')) {
                 reader.onload = function(evt) {
                     try {
@@ -905,25 +940,20 @@
                 reader.readAsText(file);
                 return;
             }
-
-            // Tuki Excel-tiedostoille
             reader.onload = async function(evt) {
                 const data = evt.target.result;
                 const workbook = XLSX.read(data, { type: 'binary' });
                 const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                 document.getElementById('status-text').innerText = "Käsitellään...";
-                
                 for (let r of rows) {
                     let lat = r.Lat || r.lat;
                     let lon = r.Lon || r.lon;
                     let osoite = r.Osoite || r.osoite || "";
-                    
                     const parseExcelDate = (val) => {
                         if (!val || val === "-") return "-";
                         let d = typeof val === 'number' ? new Date((val - 25569) * 86400 * 1000) : new Date(val);
                         return (!isNaN(d.getTime()) && d.getFullYear() > 1970) ? d.toISOString().split('T')[0] : "-";
                     };
-
                     if (!lat || !lon) {
                         if (osoite) {
                             try {
@@ -937,7 +967,6 @@
                             } catch (err) { console.error("Geokoodaus epäonnistui", err); }
                         }
                     }
-
                     if (lat && lon) {
                         const uudetTiedot = {
                             name: r.Nimi || r.nimi || "Nimetön",
@@ -954,7 +983,6 @@
                             isServiced: r["Huollettu"] === "Kyllä",
                             monitoring: r["Käytönvalvonta"] === "Kyllä"
                         };
-
                         const olemassaOlevaIndeksi = asiakkaat.findIndex(a => a.name.toLowerCase() === uudetTiedot.name.toLowerCase());
                         if (olemassaOlevaIndeksi !== -1) {
                             asiakkaat[olemassaOlevaIndeksi] = uudetTiedot;
@@ -1001,7 +1029,6 @@
             if (!nimi) return;
             const osoite = prompt("Asiakkaan osoite:");
             if (!osoite) return;
-            
             try {
                 const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(osoite)}`);
                 const data = await res.json();
@@ -1065,7 +1092,6 @@
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Asiakkaat");
             XLSX.writeFile(workbook, "Asiakkaat_Varmuuskopio.xlsx");
-            
             localStorage.setItem('lastBackupDate', new Date().toISOString().split('T')[0]);
             renderMarkers();
         }
@@ -1073,15 +1099,18 @@
         map.on('click', async (e) => {
             const lat = e.latlng.lat;
             const lon = e.latlng.lng;
+            const currentZoom = Math.round(map.getZoom());
             
-            markers.forEach(m => m.closeTooltip());
+            // Suljetaan vain tooltipit joita ei ole "pakotettu" napista päälle
+            if (!namesVisible) markers.forEach(m => m.closeTooltip());
 
             if (document.getElementById('settings-menu').style.display === 'block') {
                 document.getElementById('settings-menu').style.display = 'none';
                 return;
             }
 
-            if ((document.getElementById('info-panel').classList.contains('active') || document.getElementById('machine-card-panel').classList.contains('active')) && !isRelocating) {
+            if ((document.getElementById('info-panel').classList.contains('active') || 
+                 document.getElementById('machine-card-panel').classList.contains('active')) && !isRelocating) {
                 closePanel();
                 closeMachineCard();
                 return;
@@ -1103,14 +1132,24 @@
                 return;
             }
 
-            try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
-                const data = await res.json();
-                const nimi = prompt(`Lisää uusi asiakas:\n${data.display_name}\n\nNimi:`);
-                if (nimi) {
-                    openGroupModal({ name: nimi, address: data.display_name, lastService: "-", monitoringDate: "-", notes: "", interval: "12", group: "muut", dairy: "-", shopKetju: "-", monitoring: false, lat: lat, lon: lon, isServiced: false });
-                }
-            } catch (err) {}
+            // --- ZOOM-LOGIIKKA ---
+            if (currentZoom < CUSTOMER_ZOOM) {
+                map.flyTo([lat, lon], CUSTOMER_ZOOM);
+                // Jos nimet on aktivoitu napista, ne pysyvät auki. Jos ei, ne pysyvät kiinni.
+            } else {
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                    const data = await res.json();
+                    const nimi = prompt(`Olet zoomannut lähelle.\nOsoite: ${data.display_name}\n\nKirjoita uuden asiakkaan nimi lisätäksesi hänet:`);
+                    if (nimi && nimi.trim() !== "") {
+                        openGroupModal({ 
+                            name: nimi, address: data.display_name, lastService: "-", monitoringDate: "-", 
+                            notes: "", interval: "12", group: "muut", dairy: "-", shopKetju: "-", 
+                            monitoring: false, lat: lat, lon: lon, isServiced: false 
+                        });
+                    }
+                } catch (err) {}
+            }
         });
     </script>
 </body>
