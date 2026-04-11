@@ -402,37 +402,45 @@
 
     <script>
         // *** GOOGLE BACKUP OSOITE ***
-        const GOOGLE_BACKUP_URL = "https://script.google.com/macros/s/AKfycbxW1RzeaaGzNfPUDbJUd3dBY79A-MWZOSu8nkt7m5nV9aho3-0rHWEdRzK7SqcrErhF/exec"; 
+        const GOOGLE_BACKUP_URL = "https://script.google.com/macros/s/AKfycbw4umzLS7oWcaBOy-DCWVYjyGOh1vtfWep6E7RINqn8QVIYyEFKzN-Q8EVeAZkrtgWk/exec"; 
 
         // --- KIRJAUTUMISLOGIIKKA ---
-        async function checkLogin() {
-            const user = document.getElementById('login-user').value;
-            const pass = document.getElementById('login-pass').value;
-            
-            if ((user === "sft" && pass === "8448") || 
-                (user === "Antero" && pass === "3003") || 
-                (user === "Maitosuomi" && pass === "3103")) {
-                
+    async function checkLogin() {
+        const user = document.getElementById('login-user').value;
+        const pass = document.getElementById('login-pass').value;
+        const loadingSpinner = document.getElementById('loading-spinner');
+
+        loadingSpinner.style.display = 'flex';
+
+        try {
+            const response = await fetch(GOOGLE_BACKUP_URL, {
+                method: 'POST',
+                body: JSON.stringify({ type: "login", user: user, pass: pass })
+            });
+            const result = await response.json();
+
+            if (result && result.error === "invalid_login") {
+                document.getElementById('login-error').style.display = 'block';
+                loadingSpinner.style.display = 'none';
+            } else {
                 sessionStorage.setItem('loggedIn', 'true');
                 sessionStorage.setItem('currentUser', user);
+                asiakkaat = result; // Data saatiin suoraan pilvestä kirjautuessa
+                localStorage.setItem('mapClients', JSON.stringify(asiakkaat));
+                
                 document.getElementById('login-overlay').style.display = 'none';
-                
-                // Näytetään latausruutu
-                document.getElementById('loading-spinner').style.display = 'flex';
-                
+                loadingSpinner.style.display = 'none';
+
                 applyUserPermissions();
-                await syncFromCloud(); // Tässä haetaan tiedot pilvestä
-                
-                // Piilotetaan latausruutu haun jälkeen
-                document.getElementById('loading-spinner').style.display = 'none';
-                
-                startAutoSync(); 
-                handleGroupFilterChange(); 
                 renderMarkers();
-            } else {
-                document.getElementById('login-error').style.display = 'block';
+                startAutoSync();
+                handleGroupFilterChange();
             }
+        } catch (e) {
+            alert("Kirjautuminen epäonnistui. Tarkista yhteys.");
+            loadingSpinner.style.display = 'none';
         }
+    }
 
         function logout() {
             sessionStorage.clear();
@@ -440,19 +448,7 @@
         }
 
         // --- PILVI-LOGIIKKA ---
-        async function syncFromCloud() {
-            if (!GOOGLE_BACKUP_URL) return;
-            try {
-                const response = await fetch(GOOGLE_BACKUP_URL);
-                const cloudData = await response.json();
-                if (cloudData && Array.isArray(cloudData)) {
-                    asiakkaat = cloudData;
-                    localStorage.setItem('mapClients', JSON.stringify(asiakkaat));
-                    renderMarkers();
-                }
-            } catch (e) { console.error("Sync haku epäonnistui"); }
-        }
-
+        
         async function syncToCloud() {
             if (!GOOGLE_BACKUP_URL) return;
             if (asiakkaat.length === 0) {
@@ -473,7 +469,7 @@
 
         function startAutoSync() {
             setInterval(async () => {
-                await syncFromCloud();
+        
             }, 300000); 
         }
 
@@ -1151,6 +1147,217 @@
                 } catch (err) {}
             }
         });
+    </script>
+    <style>
+        #corner-logo-container {
+            position: absolute;
+            top: 20px;          /* Etäisyys yläreunasta */
+            right: 20px;        /* Etäisyys oikeasta reunasta */
+            display: none;      /* Piilossa ennen kirjautumista */
+            z-index: 900;       /* Pienempi kuin info-panel (1001), joten jää alle */
+            pointer-events: none;
+        }
+
+        #corner-logo {
+            height: 55px;       /* Sopiva koko kulmaan */
+            width: auto;
+            
+            /* Tausta ja muotoilu */
+            background-color: #ffffff; /* Puhdas valkoinen, joka sulautuu logon taustaan */
+            padding: 8px 12px;
+            border-radius: 8px; /* Hieman pyöristetyt kulmat tekevät siitä viimeistellyn */
+            
+            /* Varjo, joka tuo logon irti kartasta */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            
+            /* Varmistetaan että kuva täyttää alan siististi */
+            display: block;
+        }
+
+        /* Mobiilimuokkaus */
+        @media screen and (max-width: 600px) {
+            #corner-logo { height: 40px; }
+            #corner-logo-container { top: 15px; right: 15px; }
+        }
+    </style>
+
+    <div id="corner-logo-container">
+        <img id="corner-logo" src="https://sft.fi/wp-content/uploads/2025/04/SFT-Fintekniikka-logo-Habeo-retina.png" alt="SFT Logo">
+    </div>
+
+    <script>
+        (function() {
+            const originalCheckLogin = window.checkLogin;
+
+            window.checkLogin = async function() {
+                await originalCheckLogin();
+
+                if (sessionStorage.getItem('loggedIn') === 'true') {
+                    const user = sessionStorage.getItem('currentUser');
+                    
+                    // Näytetään logo SFT-käyttäjälle
+                    if (user === "sft") {
+                        document.getElementById('corner-logo-container').style.display = 'block';
+                    }
+                }
+            };
+
+            // Tarkistus sivun latautuessa (jos jo kirjautuneena)
+            if (sessionStorage.getItem('loggedIn') === 'true' && sessionStorage.getItem('currentUser') === 'sft') {
+                document.getElementById('corner-logo-container').style.display = 'block';
+            }
+        })();
+    </script>
+    <style>
+        #service-history-container {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+        }
+        .history-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .history-list {
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+        .history-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            background: white;
+            margin-bottom: 5px;
+            border-radius: 5px;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .history-date { font-weight: bold; color: #007bff; }
+        .history-note { color: #666; font-style: italic; display: block; margin-top: 2px; white-space: pre-wrap; }
+        .no-history { color: #999; font-size: 12px; text-align: center; padding: 10px; }
+    </style>
+
+    <script>
+        (function() {
+            // 1. Luodaan paikka lokille Info-paneeliin
+            const infoPanel = document.getElementById('info-panel');
+            const historyHTML = `
+                <div id="service-history-container">
+                    <div class="history-title">📜 Huoltohistoria <span id="history-count" style="font-weight: normal; font-size: 11px;"></span></div>
+                    <div id="history-list" class="history-list"></div>
+                </div>
+            `;
+            const deleteBtn = infoPanel.querySelector('.delete-btn');
+            deleteBtn.insertAdjacentHTML('beforebegin', historyHTML);
+
+            // 2. Apufunktio historian näyttämiseen
+            function renderHistory(index) {
+                const a = asiakkaat[index];
+                const listDiv = document.getElementById('history-list');
+                const countSpan = document.getElementById('history-count');
+                listDiv.innerHTML = "";
+
+                if (a.huoltoLoki && a.huoltoLoki.length > 0) {
+                    countSpan.innerText = `(${a.huoltoLoki.length} kpl)`;
+                    const sortedLoki = [...a.huoltoLoki].sort((a, b) => new Date(b.pvm) - new Date(a.pvm));
+                    sortedLoki.forEach(entry => {
+                        listDiv.innerHTML += `
+                            <div class="history-item">
+                                <span class="history-date">${formatFinnishDate(entry.pvm)}</span>
+                                <span class="history-note">${entry.muistiinpano || 'Ei merkintöjä'}</span>
+                            </div>
+                        `;
+                    });
+                } else {
+                    countSpan.innerText = "";
+                    listDiv.innerHTML = '<div class="no-history">Ei aikaisempia huoltoja.</div>';
+                }
+            }
+
+            function formatFinnishDate(isoDate) {
+                if (!isoDate || isoDate === "-" || isoDate === "") return "-";
+                const d = new Date(isoDate);
+                return isNaN(d) ? isoDate : d.toLocaleDateString('fi-FI');
+            }
+
+            // 3. Laajennetaan openPanel näyttämään loki
+            const originalOpenPanel = window.openPanel;
+            window.openPanel = function(index) {
+                originalOpenPanel(index);
+                renderHistory(index);
+            };
+
+            // 4. ÄLYKÄS TALLENNUS: Päivittää olemassa olevan tai luo uuden
+            function paivitaLoki(index, uusiPvm, uusiMuistiinpano) {
+                if (!uusiPvm || uusiPvm === "-" || uusiPvm === "") return;
+                
+                if (!asiakkaat[index].huoltoLoki) {
+                    asiakkaat[index].huoltoLoki = [];
+                }
+
+                const puhdasMuistiinpano = (uusiMuistiinpano || "").trim();
+                
+                // Etsitään, onko tälle päivälle jo merkintä
+                const olemassaOlevaEntry = asiakkaat[index].huoltoLoki.find(l => l.pvm === uusiPvm);
+
+                if (olemassaOlevaEntry) {
+                    // Jos muistiinpano on muuttunut tai uusi, lisätään se perään jos se ei jo ole siellä
+                    if (puhdasMuistiinpano && !olemassaOlevaEntry.muistiinpano.includes(puhdasMuistiinpano)) {
+                        olemassaOlevaEntry.muistiinpano += "\n--- Päivitys ---\n" + puhdasMuistiinpano;
+                        console.log("Päivitetty olemassa olevaa lokimerkintää.");
+                    }
+                } else {
+                    // Luodaan kokonaan uusi rivi
+                    asiakkaat[index].huoltoLoki.push({
+                        pvm: uusiPvm,
+                        muistiinpano: puhdasMuistiinpano || "Huolto kirjattu"
+                    });
+                    console.log("Uusi huolto lisätty lokiin: " + uusiPvm);
+                }
+            }
+
+            // A) Kaapataan "Tallenna tiedot" -nappi (tämä vastaa saveChanges funktiota koodissasi)
+            const originalSaveChanges = window.saveChanges;
+            window.saveChanges = function() {
+                if (currentIndex !== null) {
+                    const uusiPvm = document.getElementById('edit-service-date').value;
+                    const uusiMuistiinpano = document.getElementById('edit-notes').value;
+                    paivitaLoki(currentIndex, uusiPvm, uusiMuistiinpano);
+                }
+                originalSaveChanges();
+                if (currentIndex !== null) renderHistory(currentIndex);
+            };
+
+            // B) Kaapataan "Merkitse huolletuksi tänään" -nappi
+            const originalMarkAsServiced = window.markAsServiced;
+            window.markAsServiced = function() {
+                if (currentIndex !== null) {
+                    const tänään = new Date().toISOString().split('T')[0];
+                    const muistiinpano = document.getElementById('edit-notes').value;
+                    paivitaLoki(currentIndex, tänään, muistiinpano);
+                }
+                originalMarkAsServiced();
+                if (currentIndex !== null) renderHistory(currentIndex);
+            };
+
+            // 5. Excel-vienti
+            const originalExportToExcel = window.exportToExcel;
+            window.exportToExcel = function() {
+                const originalAsiakkaat = JSON.parse(JSON.stringify(asiakkaat));
+                asiakkaat.forEach(a => {
+                    if (a.huoltoLoki && a.huoltoLoki.length > 0) {
+                        a.Huoltohistoria_Loki = a.huoltoLoki.map(l => `${l.pvm}: ${l.muistiinpano}`).join(" | ");
+                    }
+                });
+                originalExportToExcel();
+                asiakkaat = originalAsiakkaat;
+            };
+        })();
     </script>
 </body>
 </html>
