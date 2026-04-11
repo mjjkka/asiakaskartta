@@ -402,45 +402,37 @@
 
     <script>
         // *** GOOGLE BACKUP OSOITE ***
-        const GOOGLE_BACKUP_URL = "https://script.google.com/macros/s/AKfycbw4umzLS7oWcaBOy-DCWVYjyGOh1vtfWep6E7RINqn8QVIYyEFKzN-Q8EVeAZkrtgWk/exec"; 
+        const GOOGLE_BACKUP_URL = "https://script.google.com/macros/s/AKfycbzYtAIXX6zTerEpt8IrsYGJW89fDEa851Xx3r1Sf_yp8N0FlMzVG9Pba1Rcu4F8ZmbV/exec"; 
 
         // --- KIRJAUTUMISLOGIIKKA ---
-    async function checkLogin() {
-        const user = document.getElementById('login-user').value;
-        const pass = document.getElementById('login-pass').value;
-        const loadingSpinner = document.getElementById('loading-spinner');
-
-        loadingSpinner.style.display = 'flex';
-
-        try {
-            const response = await fetch(GOOGLE_BACKUP_URL, {
-                method: 'POST',
-                body: JSON.stringify({ type: "login", user: user, pass: pass })
-            });
-            const result = await response.json();
-
-            if (result && result.error === "invalid_login") {
-                document.getElementById('login-error').style.display = 'block';
-                loadingSpinner.style.display = 'none';
-            } else {
+        async function checkLogin() {
+            const user = document.getElementById('login-user').value;
+            const pass = document.getElementById('login-pass').value;
+            
+            if ((user === "sft" && pass === "8448") || 
+                (user === "Antero" && pass === "3003") || 
+                (user === "Maitosuomi" && pass === "3103")) {
+                
                 sessionStorage.setItem('loggedIn', 'true');
                 sessionStorage.setItem('currentUser', user);
-                asiakkaat = result; // Data saatiin suoraan pilvestä kirjautuessa
-                localStorage.setItem('mapClients', JSON.stringify(asiakkaat));
-                
                 document.getElementById('login-overlay').style.display = 'none';
-                loadingSpinner.style.display = 'none';
-
+                
+                // Näytetään latausruutu
+                document.getElementById('loading-spinner').style.display = 'flex';
+                
                 applyUserPermissions();
+                await syncFromCloud(); // Tässä haetaan tiedot pilvestä
+                
+                // Piilotetaan latausruutu haun jälkeen
+                document.getElementById('loading-spinner').style.display = 'none';
+                
+                startAutoSync(); 
+                handleGroupFilterChange(); 
                 renderMarkers();
-                startAutoSync();
-                handleGroupFilterChange();
+            } else {
+                document.getElementById('login-error').style.display = 'block';
             }
-        } catch (e) {
-            alert("Kirjautuminen epäonnistui. Tarkista yhteys.");
-            loadingSpinner.style.display = 'none';
         }
-    }
 
         function logout() {
             sessionStorage.clear();
@@ -448,7 +440,19 @@
         }
 
         // --- PILVI-LOGIIKKA ---
-        
+        async function syncFromCloud() {
+            if (!GOOGLE_BACKUP_URL) return;
+            try {
+                const response = await fetch(GOOGLE_BACKUP_URL);
+                const cloudData = await response.json();
+                if (cloudData && Array.isArray(cloudData)) {
+                    asiakkaat = cloudData;
+                    localStorage.setItem('mapClients', JSON.stringify(asiakkaat));
+                    renderMarkers();
+                }
+            } catch (e) { console.error("Sync haku epäonnistui"); }
+        }
+
         async function syncToCloud() {
             if (!GOOGLE_BACKUP_URL) return;
             if (asiakkaat.length === 0) {
@@ -469,7 +473,7 @@
 
         function startAutoSync() {
             setInterval(async () => {
-        
+                await syncFromCloud();
             }, 300000); 
         }
 
