@@ -1363,5 +1363,526 @@
             };
         })();
     </script>
+        <script>
+(function() {
+    // --- MUUTOS 1 & 4: Käyttöliittymän hallinta ja painikkeet ---
+    const infoPanel = document.getElementById('info-panel');
+    
+    // Luodaan KV-nappi, jos sitä ei ole
+    if (!document.getElementById('btn-mark-kv')) {
+        const kvBtnHTML = `
+            <button id="btn-mark-kv" class="service-btn" style="background: #6f42c1; display: none; margin-top: 10px;">
+                🛡️ MERKITSE KÄYTÖNVALVONTA SUORITETUKSI
+            </button>
+        `;
+        document.querySelector('.service-btn').insertAdjacentHTML('afterend', kvBtnHTML);
+    }
+
+    const kvBtn = document.getElementById('btn-mark-kv');
+    const huoltoBtn = document.querySelector('.service-btn');
+    const serviceDateInput = document.getElementById('edit-service-date');
+    const kvDateInput = document.getElementById('edit-monitoring-date');
+
+    // Funktio KV-merkinnän tekemiseen
+    kvBtn.onclick = function() {
+        if (currentIndex !== null) {
+            const tänään = new Date().toISOString().split('T')[0];
+            const a = asiakkaat[currentIndex];
+            
+            a.monitoringDate = tänään;
+            a.monitoring = true;
+            
+            // MUUTOS 3: Lisätään KV-merkintä lokiin
+            lisaaLokiin(currentIndex, tänään, "Käytönvalvonta suoritettu");
+            
+            // MUUTOS 4: Automaattinen tallennus
+            tallennaJaPaivita("Käytönvalvonta tallennettu!");
+        }
+    };
+
+    // Korvataan alkuperäinen huoltonappi automaattitallentavalla versiolla (Muutos 4)
+    huoltoBtn.onclick = function() {
+        if (currentIndex !== null) {
+            const tänään = new Date().toISOString().split('T')[0];
+            const a = asiakkaat[currentIndex];
+            
+            a.lastService = tänään;
+            a.isServiced = true;
+            
+            lisaaLokiin(currentIndex, tänään, "Määräaikaishuolto suoritettu");
+            tallennaJaPaivita("Huolto tallennettu!");
+        }
+    };
+
+    function tallennaJaPaivita(viesti) {
+        updateStorage(); // Tallentaa localStorageen ja renderöi nastat (päivittää värit)
+        renderHistory(currentIndex); // Päivittää historiapaneelin
+        syncToCloud(); // Synkronoi pilveen
+        console.log(viesti);
+    }
+
+    function lisaaLokiin(index, pvm, teksti) {
+        if (!asiakkaat[index].huoltoLoki) asiakkaat[index].huoltoLoki = [];
+        asiakkaat[index].huoltoLoki.push({
+            pvm: pvm,
+            muistiinpano: teksti,
+            id: Date.now() // Uniikki ID poistamista varten
+        });
+    }
+
+    // --- MUUTOS 1: Näkymän rajoittaminen suodattimen mukaan ---
+    const originalOpenPanel = window.openPanel;
+    window.openPanel = function(index) {
+        originalOpenPanel(index);
+        const currentFilter = document.getElementById('group-filter').value;
+        
+        if (currentFilter === "Käytönvalvonta") {
+            kvBtn.style.display = 'block';
+            huoltoBtn.style.display = 'none';
+            kvDateInput.disabled = false;
+            serviceDateInput.disabled = true;
+            kvDateInput.style.border = "2px solid #6f42c1";
+            serviceDateInput.style.background = "#eee";
+        } else {
+            kvBtn.style.display = 'none';
+            huoltoBtn.style.display = 'block';
+            kvDateInput.disabled = true;
+            serviceDateInput.disabled = false;
+            kvDateInput.style.background = "#eee";
+            serviceDateInput.style.border = "2px solid #007bff";
+        }
+        renderHistory(index);
+    };
+
+    // --- MUUTOS 2: Historian poistaminen selityksellä ---
+    window.poistaLokiMerkinta = function(lokiIndex) {
+        const selitys = prompt("Miksi tämä merkintä poistetaan?");
+        if (selitys === null) return; // Peruutettu
+        
+        if (selitys.trim() === "") {
+            alert("Selitys on pakollinen!");
+            return;
+        }
+
+        const a = asiakkaat[currentIndex];
+        const poistettu = a.huoltoLoki.splice(lokiIndex, 1)[0];
+        
+        // Lisätään poistosta merkintä lokiin (lokitetaan lokin poisto)
+        if (!a.poistoLoki) a.poistoLoki = [];
+        a.poistoLoki.push({
+            pvm: new Date().toISOString().split('T')[0],
+            kohde: poistettu.pvm + ": " + poistettu.muistiinpano,
+            syy: selitys
+        });
+
+        tallennaJaPaivita("Merkintä poistettu.");
+    };
+
+    // --- MUUTOS 3: Päivitetty renderHistory ---
+    function renderHistory(index) {
+        const a = asiakkaat[index];
+        const listDiv = document.getElementById('history-list');
+        if (!listDiv) return;
+        listDiv.innerHTML = "";
+
+        if (a.huoltoLoki && a.huoltoLoki.length > 0) {
+            // Järjestetään uusin ensin
+            const sortedLoki = [...a.huoltoLoki].sort((x, y) => new Date(y.pvm) - new Date(x.pvm));
+            
+            sortedLoki.forEach((entry, i) => {
+                const isKV = entry.muistiinpano.includes("Käytönvalvonta");
+                const tyyli = isKV ? "border-left: 4px solid #6f42c1;" : "border-left: 4px solid #28a745;";
+                
+                listDiv.innerHTML += `
+                    <div class="history-item" style="${tyyli} display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <span class="history-date">${new Date(entry.pvm).toLocaleDateString('fi-FI')}</span>
+                            <span class="history-note">${entry.muistiinpano}</span>
+                        </div>
+                        <button onclick="poistaLokiMerkinta(${a.huoltoLoki.indexOf(entry)})" 
+                                style="background:none; border:none; color:red; cursor:pointer; font-size:16px;" title="Poista merkintä">×</button>
+                    </div>
+                `;
+            });
+        } else {
+            listDiv.innerHTML = '<div class="no-history">Ei merkintöjä.</div>';
+        }
+    }
+})();
+</script>
+
+<style>
+    /* Tyylit poistonapille ja lokille */
+    .history-item {
+        position: relative;
+        padding-right: 25px !important;
+    }
+    .history-item button:hover {
+        transform: scale(1.2);
+        font-weight: bold;
+    }
+    input:disabled {
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+</style>
+<div id="pro-name-modal" style="display:none; position:fixed; z-index:99999; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; font-family:sans-serif;">
+    <div style="background:white; padding:25px; border-radius:15px; width:90%; max-width:400px; box-shadow:0 15px 35px rgba(0,0,0,0.4);">
+        <h3 id="pro-modal-title" style="margin:0 0 15px 0; color:#007bff; text-align:center;">Valitse suorittaja</h3>
+        <input type="text" id="pro-search-input" placeholder="Hae tai kirjoita uusi nimi..." 
+               style="width:100%; padding:14px; border:2px solid #007bff; border-radius:10px; box-sizing:border-box; margin-bottom:10px; font-size:16px; outline:none;">
+        <div id="pro-name-list" style="max-height:200px; overflow-y:auto; border:1px solid #ddd; border-radius:10px; margin-bottom:20px; background:#f9f9f9;"></div>
+        <div style="display:flex; gap:10px;">
+            <button id="pro-confirm-btn" style="flex:2; background:#28a745; color:white; border:none; padding:15px; border-radius:10px; font-weight:bold; cursor:pointer; font-size:16px;">VAHVISTA</button>
+            <button id="pro-cancel-btn" style="flex:1; background:#6c757d; color:white; border:none; padding:15px; border-radius:10px; font-weight:bold; cursor:pointer; font-size:14px;">PERUUTA</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    let names = JSON.parse(localStorage.getItem('technicianNames')) || [];
+    let currentType = ""; 
+
+    const modal = document.getElementById('pro-name-modal');
+    const searchInput = document.getElementById('pro-search-input');
+    const listDiv = document.getElementById('pro-name-list');
+    const confirmBtn = document.getElementById('pro-confirm-btn');
+    const cancelBtn = document.getElementById('pro-cancel-btn');
+
+    // --- 1. LOKI- JA TALLENNUSFUNKTIOT ---
+    
+    function logAndSave(techName) {
+        if (currentIndex === null) return;
+        const a = asiakkaat[currentIndex];
+        
+        // LUETAAN PÄIVÄMÄÄRÄ KALENTERIKENTÄSTÄ (tämä korjaa ongelman)
+        const targetInputId = (currentType === "kv") ? 'edit-monitoring-date' : 'edit-service-date';
+        let chosenDate = document.getElementById(targetInputId).value;
+        
+        // Jos kenttä on tyhjä (esim. nappeja käytettäessä), käytetään tätä päivää
+        if (!chosenDate) {
+            chosenDate = new Date().toISOString().split('T')[0];
+            document.getElementById(targetInputId).value = chosenDate;
+        }
+
+        const logText = (currentType === "kv" ? "Käytönvalvonta" : "Määräaikaishuolto") + " - Suorittaja: " + techName;
+
+        if (currentType === "kv") {
+            a.monitoringDate = chosenDate;
+            a.monitoring = true;
+        } else {
+            a.lastService = chosenDate;
+            a.isServiced = true;
+        }
+
+        if (!a.huoltoLoki) a.huoltoLoki = [];
+        a.huoltoLoki.push({
+            pvm: chosenDate,
+            muistiinpano: logText,
+            id: Date.now()
+        });
+
+        // Järjestetään loki heti päivämäärän mukaan (uusin ensin)
+        a.huoltoLoki.sort((x, y) => new Date(y.pvm) - new Date(x.pvm));
+
+        updateStorage(); 
+        renderHistory(currentIndex); 
+        if (typeof syncToCloud === 'function') syncToCloud();
+        
+        modal.style.display = 'none';
+    }
+
+    // --- 2. NIMILISTAN HALLINTA ---
+
+    function updateModalList() {
+        const filter = searchInput.value.toLowerCase();
+        listDiv.innerHTML = "";
+        const filtered = names.filter(n => n.toLowerCase().includes(filter));
+        filtered.forEach(name => {
+            const row = document.createElement('div');
+            row.style.cssText = "padding:12px; border-bottom:1px solid #eee; cursor:pointer; display:flex; justify-content:space-between; align-items:center; background:white;";
+            row.innerHTML = `<span class="name-target" style="flex-grow:1; font-weight:500;">${name}</span><span class="delete-name" style="color:#dc3545; padding:5px 10px; font-size:20px; font-weight:bold;">&times;</span>`;
+            row.querySelector('.name-target').onclick = () => { searchInput.value = name; processSelection(); };
+            row.querySelector('.delete-name').onclick = (e) => {
+                e.stopPropagation();
+                if(confirm("Poistetaanko '" + name + "' listalta?")) {
+                    names = names.filter(n => n !== name);
+                    localStorage.setItem('technicianNames', JSON.stringify(names));
+                    updateModalList();
+                }
+            };
+            listDiv.appendChild(row);
+        });
+    }
+
+    function processSelection() {
+        const val = searchInput.value.trim();
+        if (!val) { alert("Kirjoita tai valitse nimi!"); return; }
+        if (!names.includes(val)) {
+            names.push(val);
+            names.sort();
+            localStorage.setItem('technicianNames', JSON.stringify(names));
+        }
+        logAndSave(val);
+    }
+
+    // --- 3. TAPAHTUMAKUUNTELIJAT (Napit ja Kalenteri) ---
+
+    // Huolto-nappi
+    document.querySelector('.service-btn').onclick = function(e) {
+        e.preventDefault();
+        currentType = "huolto";
+        // Asetetaan kalenteriin automaattisesti tämä päivä nappia painaessa
+        document.getElementById('edit-service-date').value = new Date().toISOString().split('T')[0];
+        openModal("Huollon suorittaja", "#28a745");
+    };
+
+    // KV-nappi (varmistetaan että löytyy)
+    function attachKVButton() {
+        let kvBtn = document.getElementById('btn-mark-kv');
+        if (!kvBtn) {
+            const btnHTML = `<button id="btn-mark-kv" class="service-btn" style="background:#6f42c1; display:none; margin-top:10px;">🛡️ MERKITSE KÄYTÖNVALVONTA SUORITETUKSI</button>`;
+            document.querySelector('.service-btn').insertAdjacentHTML('afterend', btnHTML);
+            kvBtn = document.getElementById('btn-mark-kv');
+        }
+        kvBtn.onclick = function(e) {
+            e.preventDefault();
+            currentType = "kv";
+            document.getElementById('edit-monitoring-date').value = new Date().toISOString().split('T')[0];
+            openModal("Käytönvalvonnan suorittaja", "#6f42c1");
+        };
+    }
+    attachKVButton();
+
+    // Kalenterimuutokset
+    document.getElementById('edit-service-date').onchange = function() {
+        if (document.activeElement === this) {
+            currentType = "huolto";
+            openModal("Huollon suorittaja (kalenteri)", "#28a745");
+        }
+    };
+    document.getElementById('edit-monitoring-date').onchange = function() {
+        if (document.activeElement === this) {
+            currentType = "kv";
+            openModal("Käytönvalvonnan suorittaja (kalenteri)", "#6f42c1");
+        }
+    };
+
+    function openModal(title, color) {
+        const t = document.getElementById('pro-modal-title');
+        t.innerText = title;
+        t.style.color = color;
+        searchInput.value = "";
+        modal.style.display = 'flex';
+        updateModalList();
+        searchInput.focus();
+    }
+
+    confirmBtn.onclick = processSelection;
+    cancelBtn.onclick = () => modal.style.display = 'none';
+    searchInput.oninput = updateModalList;
+    searchInput.onkeydown = (e) => { if(e.key === "Enter") processSelection(); };
+
+    // --- 4. HISTORIAN NÄYTTÄMINEN JA JÄRJESTYS ---
+
+    window.renderHistory = function(index) {
+        const a = asiakkaat[index];
+        const listDiv = document.getElementById('history-list');
+        if (!listDiv) return;
+        listDiv.innerHTML = "";
+
+        if (a.huoltoLoki && a.huoltoLoki.length > 0) {
+            // Varmistetaan järjestys: uusin pvm ensin
+            const sorted = [...a.huoltoLoki].sort((x, y) => new Date(y.pvm) - new Date(x.pvm));
+            
+            sorted.forEach(entry => {
+                const isKV = entry.muistiinpano.includes("Käytönvalvonta");
+                const color = isKV ? "#6f42c1" : "#28a745";
+                const item = document.createElement('div');
+                item.style.cssText = `border-left:5px solid ${color}; background:#f8f9fa; margin-bottom:8px; padding:10px; border-radius:0 8px 8px 0; position:relative; box-shadow:0 1px 3px rgba(0,0,0,0.1);`;
+                item.innerHTML = `
+                    <div style="font-size:11px; color:#666; font-weight:bold;">${new Date(entry.pvm).toLocaleDateString('fi-FI')}</div>
+                    <div style="font-size:13px; color:${color}; font-weight:600; margin-top:2px;">${entry.muistiinpano}</div>
+                    <button class="del-log" style="position:absolute; right:5px; top:5px; background:none; border:none; color:#ccc; cursor:pointer; font-size:20px;">&times;</button>
+                `;
+                item.querySelector('.del-log').onclick = () => {
+                    if (confirm("Poistetaanko merkintä?")) {
+                        const originalIdx = a.huoltoLoki.indexOf(entry);
+                        a.huoltoLoki.splice(originalIdx, 1);
+                        updateStorage();
+                        renderHistory(index);
+                    }
+                };
+                listDiv.appendChild(item);
+            });
+        } else {
+            listDiv.innerHTML = '<div style="color:#999; font-size:12px; text-align:center; padding:10px;">Ei merkintöjä.</div>';
+        }
+    };
+
+    // Ylikirjoitetaan paneelin avaus jotta napit vaihtuvat oikein
+    const oldOpen = window.openPanel;
+    window.openPanel = function(i) {
+        oldOpen(i);
+        const filter = document.getElementById('group-filter').value;
+        const hBtn = document.querySelector('.service-btn');
+        const kvBtn = document.getElementById('btn-mark-kv');
+        if (filter === "Käytönvalvonta") {
+            if(kvBtn) kvBtn.style.display = 'block';
+            hBtn.style.display = 'none';
+        } else {
+            if(kvBtn) kvBtn.style.display = 'none';
+            hBtn.style.display = 'block';
+        }
+    };
+
+})();
+</script>
+<script>
+(function() {
+    // Ylikirjoitetaan alkuperäinen getMarkerColor-funktio
+    window.getMarkerColor = function(a) {
+        const currentFilter = document.getElementById('group-filter').value;
+        let pvmLista = [];
+
+        // 1. Kerätään kaikki päivämäärät lokista
+        if (a.huoltoLoki && a.huoltoLoki.length > 0) {
+            a.huoltoLoki.forEach(entry => {
+                if (entry.pvm && entry.pvm !== "-") {
+                    // Jos suodatin on KV, huomioidaan vain KV-merkinnät. Muuten vain huollot.
+                    const isKVLog = entry.muistiinpano.includes("Käytönvalvonta");
+                    if (currentFilter === "Käytönvalvonta") {
+                        if (isKVLog) pvmLista.push(new Date(entry.pvm));
+                    } else {
+                        if (!isKVLog) pvmLista.push(new Date(entry.pvm));
+                    }
+                }
+            });
+        }
+
+        // 2. Jos lokista ei löytynyt sopivia päivämääriä, kokeillaan asiakkaan perustietoja
+        if (pvmLista.length === 0) {
+            const backupDate = (currentFilter === "Käytönvalvonta") ? a.monitoringDate : a.lastService;
+            if (backupDate && backupDate !== "-") {
+                pvmLista.push(new Date(backupDate));
+            }
+        }
+
+        // 3. Etsitään todellinen kalenterissa lähin (tuorein) päivämäärä
+        if (pvmLista.length === 0) return 'blue'; // Ei merkintöjä
+
+        // Lajitellaan päivämäärät niin, että tuorein on ensimmäisenä
+        pvmLista.sort((a, b) => b - a);
+        const tuoreinPvm = pvmLista[0];
+
+        // 4. Lasketaan väri tuoreimman päivämäärän perusteella
+        const tänään = new Date();
+        const interval = (currentFilter === "Käytönvalvonta") ? 6 : parseInt(a.interval || 12);
+        
+        const seuraavaHuolto = new Date(tuoreinPvm);
+        seuraavaHuolto.setMonth(seuraavaHuolto.getMonth() + interval);
+        
+        const varoitusRaja = new Date(seuraavaHuolto);
+        varoitusRaja.setMonth(varoitusRaja.getMonth() - 2);
+        
+        if (tänään >= seuraavaHuolto) return 'red';
+        if (tänään >= varoitusRaja) return 'yellow';
+        return 'green';
+    };
+
+    // Pakotetaan kartta päivittymään heti kun lisäosa latautuu
+    if (typeof renderMarkers === 'function') {
+        renderMarkers();
+    }
+    
+    console.log("Nastan värit logiikka päivitetty: Kronologinen järjestys käytössä.");
+})();
+</script>
+<script>
+(function() {
+    // Etsitään elementti, jossa on versiotieto
+    const versionElement = document.querySelector('.version-text');
+    if (versionElement) {
+        versionElement.innerText = 'v.3.60';
+    }
+
+    // Päivitetään myös sivun otsikko (title), jos haluat sen täsmäävän
+    document.title = 'Asiakaskartta Pro - v.3.60';
+})();
+</script>
+<script>
+(function() {
+    // 1. Määritellään karttapohjat
+    const osmPohja = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    });
+
+    const satelliittiPohja = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains:['mt0','mt1','mt2','mt3'],
+        attribution: '&copy; Google Maps'
+    });
+
+    const baseMaps = {
+        "Kartta": osmPohja,
+        "Satelliitti": satelliittiPohja
+    };
+
+    // 2. Lisätään hallinta
+    const layerControl = L.control.layers(baseMaps, null, { 
+        position: 'bottomright', 
+        collapsed: true 
+    }).addTo(map);
+
+    // Varmistetaan että kartta latautuu oikein
+    osmPohja.addTo(map);
+
+    // 3. Pakotetaan ikoni näkyviin, jos Leafletin oletuskuva ei lataudu
+    setTimeout(() => {
+        const toggle = document.querySelector('.leaflet-control-layers-toggle');
+        if (toggle && !toggle.innerHTML) {
+            toggle.innerHTML = '🗺️';
+            toggle.style.display = 'flex';
+            toggle.style.alignItems = 'center';
+            toggle.style.justifyContent = 'center';
+            toggle.style.fontSize = '22px';
+            toggle.style.textDecoration = 'none';
+        }
+    }, 500);
+})();
+</script>
+
+<style>
+    /* Pakotetaan painike näkyviin Nimet-napin yläpuolelle */
+    .leaflet-control-layers {
+        margin-bottom: 60px !important; /* Nostetaan selkeästi ylös */
+        margin-right: 12px !important;
+        z-index: 1000 !important;
+        background: white !important;
+        border: 2px solid rgba(0,0,0,0.3) !important;
+        border-radius: 8px !important;
+        width: 44px !important;
+        height: 44px !important;
+    }
+
+    .leaflet-control-layers-expanded {
+        width: auto !important;
+        height: auto !important;
+        padding: 10px !important;
+        background: white !important;
+        color: black !important;
+    }
+
+    /* Tyylitellään valintaruudut */
+    .leaflet-control-layers-base label {
+        display: block;
+        padding: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        font-family: sans-serif;
+        font-size: 14px;
+    }
+</style>
 </body>
 </html>
