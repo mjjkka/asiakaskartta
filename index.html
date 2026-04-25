@@ -1884,5 +1884,96 @@
         font-size: 14px;
     }
 </style>
+<script>
+(function() {
+    let idleTimer;
+    let rotationTimer;
+    const idleLimit = 5 * 60 * 1000; // 5 minuuttia (ms)
+    const rotationInterval = 10 * 1000; // 10 sekuntia (ms)
+    
+    // Ryhmät siinä järjestyksessä kuin haluat ne kierrättää
+    const ryhmat = ["Kaikki", "Tilasäiliö", "Kauppa", "Julkinen", "Käytönvalvonta", "muut"];
+    let nykyinenIndeksi = 0;
+    let onkoKiertoPaalla = false;
+    let alkuperainenRyhma = "";
+
+    // Funktio, joka vaihtaa ryhmän
+    function vaihdaSeuraavaRyhma() {
+        const filter = document.getElementById('group-filter');
+        if (!filter) return;
+
+        nykyinenIndeksi = (nykyinenIndeksi + 1) % ryhmat.length;
+        filter.value = ryhmat[nykyinenIndeksi];
+        
+        // Kutsutaan alkuperäisen koodin funktiota, joka päivittää kartan
+        if (typeof handleGroupFilterChange === 'function') {
+            handleGroupFilterChange();
+        }
+        
+        console.log("Infonäyttö: Näytetään ryhmä " + ryhmat[nykyinenIndeksi]);
+    }
+
+    function kaynnistaKierto() {
+        if (onkoKiertoPaalla) return;
+        
+        console.log("Infonäyttö-tila aktivoitu.");
+        onkoKiertoPaalla = true;
+        alkuperainenRyhma = document.getElementById('group-filter').value;
+        
+        // Aloitetaan kierto heti
+        vaihdaSeuraavaRyhma();
+        rotationTimer = setInterval(vaihdaSeuraavaRyhma, rotationInterval);
+        
+        // Näytetään pieni ilmoitus näytöllä
+        naytaInfonayttoIlmoitus(true);
+    }
+
+    function pysaytaKierto() {
+        if (!onkoKiertoPaalla) return;
+        
+        console.log("Infonäyttö-tila lopetettu.");
+        onkoKiertoPaalla = false;
+        clearInterval(rotationTimer);
+        
+        // Palautetaan alkuperäinen ryhmä
+        const filter = document.getElementById('group-filter');
+        if (filter && alkuperainenRyhma) {
+            filter.value = alkuperainenRyhma;
+            if (typeof handleGroupFilterChange === 'function') {
+                handleGroupFilterChange();
+            }
+        }
+        
+        naytaInfonayttoIlmoitus(false);
+    }
+
+    function nollaaAjastimet() {
+        pysaytaKierto();
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(kaynnistaKierto, idleLimit);
+    }
+
+    // Visuaalinen ilmoitus kierron ollessa päällä
+    function naytaInfonayttoIlmoitus(nayta) {
+        let alertBox = document.getElementById('rotation-alert');
+        if (!alertBox) {
+            alertBox = document.createElement('div');
+            alertBox.id = 'rotation-alert';
+            alertBox.style.cssText = "position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); color:white; padding:10px 20px; border-radius:20px; z-index:10000; font-size:12px; pointer-events:none; transition:opacity 0.5s; display:none;";
+            alertBox.innerHTML = "🔄 Automaattinen kierto päällä • Liikuta hiirtä keskeyttääksesi";
+            document.body.appendChild(alertBox);
+        }
+        alertBox.style.display = nayta ? 'block' : 'none';
+    }
+
+    // Seurataan käyttäjän toimintaa
+    window.onload = nollaaAjastimet;
+    document.onmousemove = nollaaAjastimet;
+    document.onkeypress = nollaaAjastimet;
+    document.ontouchstart = nollaaAjastimet;
+    document.onclick = nollaaAjastimet;
+
+})();
+</script>
 </body>
 </html>
